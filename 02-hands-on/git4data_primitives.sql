@@ -59,8 +59,6 @@ SELECT COUNT(*) FROM orders {snapshot = 'v1'};  -- 1000000 (intact in the past)
 
 -- reset --hard: actually roll the table back to v1.
 RESTORE TABLE git4data_demo.orders {SNAPSHOT = v1};
--- Equivalent form:
--- RESTORE TABLE git4data_demo.orders FROM SNAPSHOT v1;
 SELECT COUNT(*) FROM orders;                    -- 1000000 (the 1000 rows are back)
 
 
@@ -102,17 +100,23 @@ SELECT COUNT(*) FROM orders;                    -- still 1000000 (mainline untou
 -- Totals only. Returns in milliseconds even on 1M rows, because it scans only
 -- the CHANGED objects, not the whole table.
 DATA BRANCH DIFF orders_dev AGAINST orders OUTPUT SUMMARY;
---   INSERTED  1      (Frank)
---   UPDATED   1000   (the rows whose status changed)
---   DELETED   0
+-- Result is a table of changed-row counts on each side:
+--   metric   | orders_dev | orders
+--   INSERTED |          1 |      0     (Frank)
+--   DELETED  |          0 |      0
+--   UPDATED  |       1000 |      0     (the rows whose status changed)
 
 -- Other OUTPUT forms:
 DATA BRANCH DIFF orders_dev AGAINST orders OUTPUT LIMIT 10;                 -- per-row diff
 DATA BRANCH DIFF orders_dev AGAINST orders OUTPUT COUNT;                    -- single number
 DATA BRANCH DIFF orders_dev AGAINST orders COLUMNS (status, amount) OUTPUT SUMMARY; -- only some columns
 
--- Export the diff as an executable SQL patch (DELETE + REPLACE INTO) that can
--- be applied to any MatrixOne instance with `mysql ... < diff_xxx.sql`.
+-- Export the diff as an executable SQL patch. The output directory must already
+-- exist, and it is a path on the MatrixOne server (inside the container). For
+-- Docker, create it first:  docker exec matrixone mkdir -p /tmp/orders_diff
+-- The generated .sql is one transaction: it loads the rows to delete/insert into
+-- two temp tables, applies them to the target with DELETE + INSERT INTO, then
+-- drops the temp tables. Apply it anywhere with: mysql ... < diff_xxx.sql
 -- DATA BRANCH DIFF orders_dev AGAINST orders OUTPUT FILE '/tmp/orders_diff/';
 
 
@@ -176,6 +180,12 @@ SELECT order_id, status FROM orders WHERE order_id IN (2, 4, 1000002) ORDER BY o
 -- SNAPSHOT is a save button you press; PITR is continuous history the database
 -- keeps automatically. RANGE unit: 'h' hours / 'd' days (default) / 'mo' months / 'y' years.
 CREATE PITR demo_pitr FOR DATABASE git4data_demo RANGE 1 'd';
+
+-- TIMING: a PITR has a valid-from boundary (~its creation time). Recording a
+-- second-precision restore point immediately after creating it may fail with
+-- "input timestamp ... is less than the pitr valid time". Wait 1-2s, or check
+-- the boundary first, before recording your restore point.
+SHOW PITR;                                      -- confirm demo_pitr is active (its start time)
 
 -- Note "now", then do something destructive.
 SELECT now();                                   -- e.g. 2026-06-04 14:03:07 — copy this value
