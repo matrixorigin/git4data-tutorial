@@ -6,7 +6,7 @@
 -- Through Every Git Primitive".
 --
 -- Run it against a local MatrixOne (Docker):
---     docker run -d -p 6001:6001 --name matrixone matrixorigin/matrixone:latest
+--     docker run -d -p 6001:6001 --name matrixone matrixorigin/matrixone:4.0.0-rc1
 --     mysql -h 127.0.0.1 -P 6001 -u root -p111 < git4data_primitives.sql
 --
 -- Lines that are intentionally COMMENTED OUT either (a) are expected to fail on
@@ -235,14 +235,14 @@ RESTORE DATABASE git4data_demo {SNAPSHOT = db_v1};   -- all tables atomically ba
 --        CASE result % 3 WHEN 0 THEN 'paid' WHEN 1 THEN 'pending' ELSE 'cancelled' END
 -- FROM generate_series(1, 9000000) g;
 
--- Measured on a single-node Docker MatrixOne 4.0.0, steady-state (median of
+-- Measured on a single-node Docker MatrixOne 4.0.0-rc1, steady-state (median of
 -- several runs; diff/merge each touch only 1000 rows):
 --
 --   table size | load  | SNAPSHOT | CLONE | DATA BRANCH | DIFF(1000) | MERGE(1000)
 --   -----------+-------+----------+-------+-------------+------------+------------
 --   1,000,000  | 0.5 s | 6 ms     | 6 ms  | 7 ms        | 13 ms      | 64 ms
 --   10,000,000 | 5.3 s | 8 ms     | 8 ms  | 7 ms        | 21 ms      | 178 ms
---   100,000,000| 41 s  | 5 ms     | 25 ms | 19 ms       | 23 ms      | 1.3 s
+--   100,000,000| 41 s  | 5 ms     | 25 ms | 19 ms       | 23 ms      | 189 ms
 --
 -- snapshot: dead constant (just names a metadata directory).
 -- clone/branch: copy the metadata directory, not the data — 100x the data, clone

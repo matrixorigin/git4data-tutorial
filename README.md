@@ -23,7 +23,7 @@ Each later tutorial will add its own folder here.
 
 ```bash
 # 1. Run a local MatrixOne (open source, MySQL-compatible)
-docker run -d -p 6001:6001 --name matrixone matrixorigin/matrixone:latest
+docker run -d -p 6001:6001 --name matrixone matrixorigin/matrixone:4.0.0-rc1
 
 # 2. Run the Part 2 walkthrough — every Git primitive on 1,000,000 rows
 mysql -h 127.0.0.1 -P 6001 -u root -p111 < 02-hands-on/git4data_primitives.sql
@@ -54,13 +54,13 @@ files needed) and cleans up after itself.
 Same table, same operations, on a single-node Docker MatrixOne (diff/merge each
 touch only 1,000 rows):
 
-Steady-state, median of several runs (MatrixOne 4.0.0):
+Steady-state, median of several runs (MatrixOne 4.0.0-rc1):
 
 | table size | load | `CREATE SNAPSHOT` | `CLONE` | `DATA BRANCH CREATE` | `DIFF` (1000) | `MERGE` (1000) |
 |---|---|---|---|---|---|---|
 | 1,000,000 | 0.5 s | 6 ms | 6 ms | 7 ms | 13 ms | 64 ms |
 | 10,000,000 | 5.3 s | 8 ms | 8 ms | 7 ms | 21 ms | 178 ms |
-| 100,000,000 | 41 s | 5 ms | 25 ms | 19 ms | 23 ms | 1.3 s |
+| 100,000,000 | 41 s | 5 ms | 25 ms | 19 ms | 23 ms | 189 ms |
 
 Snapshot is dead constant (it just names a metadata directory). Clone/branch copy
 the metadata directory, not the data — 100× the data, clone rises only 6 ms → 25 ms.
