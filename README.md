@@ -54,14 +54,19 @@ files needed) and cleans up after itself.
 Same table, same operations, on a single-node Docker MatrixOne (diff/merge each
 touch only 1,000 rows):
 
+Steady-state, median of several runs (MatrixOne 4.0.0):
+
 | table size | load | `CREATE SNAPSHOT` | `CLONE` | `DATA BRANCH CREATE` | `DIFF` (1000) | `MERGE` (1000) |
 |---|---|---|---|---|---|---|
-| 1,000,000 | 0.55 s | 5.9 ms | 6.7 ms | 7.1 ms | 11 ms | 62 ms |
-| 10,000,000 | 5.5 s | 9.7 ms | 9.6 ms | 18.6 ms | 17.5 ms | 223 ms |
-| 100,000,000 | 42 s | 45 ms | 146 ms | 229 ms | 219 ms | 2.9 s |
+| 1,000,000 | 0.5 s | 6 ms | 6 ms | 7 ms | 13 ms | 64 ms |
+| 10,000,000 | 5.3 s | 8 ms | 8 ms | 7 ms | 21 ms | 178 ms |
+| 100,000,000 | 41 s | 5 ms | 25 ms | 19 ms | 23 ms | 1.3 s |
 
-Snapshot / clone / branch stay ~constant (they move metadata, not data); diff /
-merge scale with *how many rows changed*, not table size.
+Snapshot is dead constant (it just names a metadata directory). Clone/branch copy
+the metadata directory, not the data — 100× the data, clone rises only 6 ms → 25 ms.
+Diff/merge scale with *how many rows changed*, not table size. (The first snapshot
+of a freshly loaded table is ~10–12 ms — a one-time flush of in-memory data — then
+drops to the steady-state numbers above.)
 
 ## Links
 

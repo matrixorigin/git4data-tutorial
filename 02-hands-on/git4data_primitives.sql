@@ -235,16 +235,22 @@ RESTORE DATABASE git4data_demo {SNAPSHOT = db_v1};   -- all tables atomically ba
 --        CASE result % 3 WHEN 0 THEN 'paid' WHEN 1 THEN 'pending' ELSE 'cancelled' END
 -- FROM generate_series(1, 9000000) g;
 
--- Measured on a single-node Docker MatrixOne (diff/merge each touch only 1000 rows):
+-- Measured on a single-node Docker MatrixOne 4.0.0, steady-state (median of
+-- several runs; diff/merge each touch only 1000 rows):
 --
---   table size | load   | SNAPSHOT | CLONE  | DATA BRANCH | DIFF(1000) | MERGE(1000)
---   -----------+--------+----------+--------+-------------+------------+------------
---   1,000,000  | 0.55 s | 5.9 ms   | 6.7 ms | 7.1 ms      | 11 ms      | 62 ms
---   10,000,000 | 5.5 s  | 9.7 ms   | 9.6 ms | 18.6 ms     | 17.5 ms    | 223 ms
---   100,000,000| 42 s   | 45 ms    | 146 ms | 229 ms      | 219 ms     | 2.9 s
+--   table size | load  | SNAPSHOT | CLONE | DATA BRANCH | DIFF(1000) | MERGE(1000)
+--   -----------+-------+----------+-------+-------------+------------+------------
+--   1,000,000  | 0.5 s | 6 ms     | 6 ms  | 7 ms        | 13 ms      | 64 ms
+--   10,000,000 | 5.3 s | 8 ms     | 8 ms  | 7 ms        | 21 ms      | 178 ms
+--   100,000,000| 41 s  | 5 ms     | 25 ms | 19 ms       | 23 ms      | 1.3 s
 --
--- snapshot/clone/branch: ~constant (metadata only, no data copied).
--- diff/merge: scale with HOW MANY ROWS CHANGED, not with table size.
+-- snapshot: dead constant (just names a metadata directory).
+-- clone/branch: copy the metadata directory, not the data — 100x the data, clone
+--   rises only 6ms -> 25ms (a few MB of metadata, never tens of GB of rows).
+-- diff/merge: scale with HOW MANY ROWS CHANGED, not table size (merge also grows
+--   with table size since it writes the changes back into the main table).
+-- NOTE: the FIRST snapshot of a freshly loaded table is ~10-12 ms (a one-time
+--   flush of in-memory data to object storage); it then drops to the above.
 
 
 -- =============================================================================
