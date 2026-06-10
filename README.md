@@ -15,7 +15,9 @@ Git-style version control for data at scale (`commit`, `branch`, `diff`, `merge`
 |------|-------|-----------|
 | 1 | The Git moment for data at scale (concept) | — |
 | 2 | **Hands on: from zero, through every Git primitive** | [`02-hands-on/`](02-hands-on/) |
-| … | more coming (implementation principles, ML/agent scenarios) | |
+| 3 | Under the hood: why snapshot/diff/merge are this fast (concept) | — |
+| 4 | **Incident rescue: snapshot before, DIFF to investigate, PITR after** | [`04-incident-rescue/`](04-incident-rescue/) |
+| … | more coming (data-ops collaboration & release gates, ML/SFT/labeling/RLHF, agent memory/trace/evolution) | |
 
 Each later tutorial will add its own folder here.
 
