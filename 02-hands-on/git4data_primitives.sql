@@ -3,7 +3,8 @@
 -- Every Git primitive, runnable end to end on 1,000,000 rows.
 --
 -- Companion to the article "MatrixOne Git4Data Deep Dive (Part 2): From Zero,
--- Through Every Git Primitive".
+-- Through Every Git Primitive":
+-- https://github.com/matrixorigin/matrixorigin-blog/blob/main/matrixorigin/git4data-part2-hands-on/index.md
 --
 -- Run it against a local MatrixOne (Docker):
 --     docker run -d -p 6001:6001 --name matrixone matrixorigin/matrixone:4.0.0-rc1

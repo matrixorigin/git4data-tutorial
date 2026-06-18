@@ -11,25 +11,27 @@ Git-style version control for data at scale (`commit`, `branch`, `diff`, `merge`
 
 ## The series
 
-| Part | Theme | Topic | Code here |
-|------|-------|-------|-----------|
-| 1 | Concept | The Git moment for data at scale | — |
-| 2 | Concept | **Hands on: every Git primitive, from zero** | [`02-hands-on/`](02-hands-on/) |
-| 3 | Concept | Under the hood: why snapshot/diff/merge are this fast | — |
-| 4 | Concept | The data-versioning landscape: git4data vs lakeFS / Dolt / Snowflake | — |
-| 5 | Data Ops | **Incident rescue**: snapshot / DIFF investigation / PITR | [`05-incident-rescue/`](05-incident-rescue/) |
-| 6 | Data Ops | **Collaborative development**: one branch per engineer | [`06-collaborative-dev/`](06-collaborative-dev/) |
-| 7 | Data Ops | **Write-Audit-Publish**: a release gate for data | [`07-write-audit-publish/`](07-write-audit-publish/) |
-| 8 | AI Training | **ML continuous learning**: train only the delta | [`08-ml-incremental/`](08-ml-incremental/) |
-| 9 | AI Training | **SFT curation**: clean in place, with receipts | [`09-sft-curation/`](09-sft-curation/) |
-| 10 | AI Training | **Collaborative labeling**: disagreement IS the conflict | [`10-labeling-collab/`](10-labeling-collab/) |
-| 11 | AI Training | **RLHF preference data**: consensus, re-judging, reproducibility | [`11-rlhf-preference/`](11-rlhf-preference/) |
-| 12 | AI Training | **Multimodal × lakeFS**: bytes there, catalog here | [`12-multimodal-lakefs/`](12-multimodal-lakefs/) |
-| 13 | Agents | **Agent memory**: versioned, branchable, rewindable | [`13-agent-memory/`](13-agent-memory/) |
-| 14 | Agents | **Agent traces**: queryable, joinable, versioned | [`14-agent-trace/`](14-agent-trace/) |
-| 15 | Agents | **Agent self-evolution** (finale): branch / evaluate / merge / roll back | [`15-agent-evolution/`](15-agent-evolution/) |
+| Part | Theme | Topic | Article | Code |
+|------|-------|-------|---------|------|
+| 1 | Concept | The Git moment for data at scale | [Blog ↗](https://github.com/matrixorigin/matrixorigin-blog/blob/main/matrixorigin/git4data-part1-data-at-scale/index.md) | — |
+| 2 | Concept | **Hands on: every Git primitive, from zero** | [Blog ↗](https://github.com/matrixorigin/matrixorigin-blog/blob/main/matrixorigin/git4data-part2-hands-on/index.md) | [`02-hands-on/`](02-hands-on/) |
+| 3 | Concept | Under the hood: why snapshot/diff/merge are this fast | [Blog ↗](https://github.com/matrixorigin/matrixorigin-blog/blob/main/matrixorigin/git4data-part3-under-the-hood/index.md) | — |
+| 4 | Concept | The data-versioning landscape: git4data vs lakeFS / Dolt / Snowflake | [Blog ↗](https://github.com/matrixorigin/matrixorigin-blog/blob/main/matrixorigin/git4data-part4-landscape/index.md) | — |
+| 5 | Data Ops | **Incident rescue**: snapshot / DIFF investigation / PITR | [Article](05-incident-rescue/article_en.md) | [`05-incident-rescue/`](05-incident-rescue/) |
+| 6 | Data Ops | **Collaborative development**: one branch per engineer | [Article](06-collaborative-dev/article_en.md) | [`06-collaborative-dev/`](06-collaborative-dev/) |
+| 7 | Data Ops | **Write-Audit-Publish**: a release gate for data | [Article](07-write-audit-publish/article_en.md) | [`07-write-audit-publish/`](07-write-audit-publish/) |
+| 8 | AI Training | **ML continuous learning**: train only the delta | [Article](08-ml-incremental/article_en.md) | [`08-ml-incremental/`](08-ml-incremental/) |
+| 9 | AI Training | **SFT curation**: clean in place, with receipts | [Article](09-sft-curation/article_en.md) | [`09-sft-curation/`](09-sft-curation/) |
+| 10 | AI Training | **Collaborative labeling**: disagreement IS the conflict | [Article](10-labeling-collab/article_en.md) | [`10-labeling-collab/`](10-labeling-collab/) |
+| 11 | AI Training | **RLHF preference data**: consensus, re-judging, reproducibility | [Article](11-rlhf-preference/article_en.md) | [`11-rlhf-preference/`](11-rlhf-preference/) |
+| 12 | AI Training | **Multimodal × lakeFS**: bytes there, catalog here | [Article](12-multimodal-lakefs/article_en.md) | [`12-multimodal-lakefs/`](12-multimodal-lakefs/) |
+| 13 | Agents | **Agent memory**: versioned, branchable, rewindable | [Article](13-agent-memory/article_en.md) | [`13-agent-memory/`](13-agent-memory/) |
+| 14 | Agents | **Agent traces**: queryable, joinable, versioned | [Article](14-agent-trace/article_en.md) | [`14-agent-trace/`](14-agent-trace/) |
+| 15 | Agents | **Agent self-evolution** (finale): branch / evaluate / merge / roll back | [Article](15-agent-evolution/article_en.md) | [`15-agent-evolution/`](15-agent-evolution/) |
 
-Each later tutorial will add its own folder here.
+Concept parts (1–4) link out to the published blog. Each practice part (5–15)
+ships its full article in-folder — `article_en.md` / `article_zh.md` — right
+next to the runnable SQL.
 
 ## Quick start (5 minutes)
 
