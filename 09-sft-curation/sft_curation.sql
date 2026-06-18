@@ -1,5 +1,5 @@
 -- =============================================================================
--- Git4Data Tutorial — Part 8: SFT Data Curation — clean in place, with receipts
+-- Git4Data Tutorial — Part 9: SFT Data Curation — clean in place, with receipts
 -- Dedup / quality-filter / decontaminate with plain SQL, then use DIFF as the
 -- provenance record of exactly what curation removed.
 -- Run:  mysql -h 127.0.0.1 -P 6001 -u root -p111 < sft_curation.sql

@@ -1,5 +1,5 @@
 -- =============================================================================
--- Git4Data Tutorial — Part 5: Collaborative Data Development
+-- Git4Data Tutorial — Part 6: Collaborative Data Development
 -- Multiple engineers fork the same table, work in parallel, merge back.
 -- Run:  mysql -h 127.0.0.1 -P 6001 -u root -p111 < collaborative_dev.sql
 -- =============================================================================

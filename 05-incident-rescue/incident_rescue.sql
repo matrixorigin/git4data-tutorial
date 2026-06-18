@@ -1,8 +1,8 @@
 -- =============================================================================
--- MatrixOne Git4Data Tutorial — Part 4: Incident Rescue
+-- MatrixOne Git4Data Tutorial — Part 5: Incident Rescue
 -- Three layers of safety net: snapshot before, DIFF to investigate, PITR after.
 --
--- Companion to "Git4Data Deep Dive (Part 4): Incident Rescue — From a
+-- Companion to "Git4Data Deep Dive (Part 5): Incident Rescue — From a
 -- Fat-Fingered UPDATE to a Dropped Table, Roll Back in Seconds".
 --
 -- Run against a local MatrixOne:

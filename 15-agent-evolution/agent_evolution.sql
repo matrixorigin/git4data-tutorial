@@ -1,5 +1,5 @@
 -- =============================================================================
--- Git4Data Tutorial — Part 14: Agent Self-Evolution (series capstone)
+-- Git4Data Tutorial — Part 15: Agent Self-Evolution (series capstone)
 -- The full machine-driven loop: branch the agent's brain into candidates,
 -- mutate each, evaluate offline, merge the winner, discard the rest — and
 -- roll back if a release goes bad. No human in the loop.

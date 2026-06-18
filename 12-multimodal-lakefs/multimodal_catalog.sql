@@ -1,5 +1,5 @@
 -- =============================================================================
--- Git4Data Tutorial — Part 11: Multimodal Training Sets — MatrixOne x lakeFS
+-- Git4Data Tutorial — Part 12: Multimodal Training Sets — MatrixOne x lakeFS
 -- Bytes (images/video) live in lakeFS, versioned by commit. MatrixOne keeps
 -- the CATALOG: file references pinned to a lakeFS commit + labels, all
 -- versioned with git4data. A table snapshot then freezes "which bytes + which

@@ -1,5 +1,5 @@
 -- =============================================================================
--- Git4Data Tutorial — Part 13: Agent Traces — queryable, joinable, versioned
+-- Git4Data Tutorial — Part 14: Agent Traces — queryable, joinable, versioned
 -- Agent execution traces (OTel-style spans) land in a table: SQL rebuilds the
 -- call tree and computes cost; snapshots pin "the traces as of release vN" so
 -- A/B comparisons across agent versions are exact, not anecdotal.

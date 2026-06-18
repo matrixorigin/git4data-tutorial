@@ -1,5 +1,5 @@
 -- =============================================================================
--- Git4Data Tutorial — Part 12: Agent Memory — versioned, branchable, rewindable
+-- Git4Data Tutorial — Part 13: Agent Memory — versioned, branchable, rewindable
 -- An agent's long-term memory is a table. Version it: roll back poisoned
 -- memories, try experimental memories on a branch, and answer "what did the
 -- agent believe last week?" with time travel.

@@ -1,5 +1,5 @@
 -- =============================================================================
--- Git4Data Tutorial — Part 6: Write-Audit-Publish (release gate for data)
+-- Git4Data Tutorial — Part 7: Write-Audit-Publish (release gate for data)
 -- New data lands on a staging branch, passes an SQL audit, then publishes
 -- atomically. Production never sees a bad row.
 -- Run:  mysql -h 127.0.0.1 -P 6001 -u root -p111 < write_audit_publish.sql

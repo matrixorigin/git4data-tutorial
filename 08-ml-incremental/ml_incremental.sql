@@ -1,5 +1,5 @@
 -- =============================================================================
--- Git4Data Tutorial — Part 7: ML Continuous Learning — train only the delta
+-- Git4Data Tutorial — Part 8: ML Continuous Learning — train only the delta
 -- Snapshot per training run; DIFF between runs yields exactly the rows that
 -- changed — feed those to incremental training instead of full retrains.
 -- Run:  mysql -h 127.0.0.1 -P 6001 -u root -p111 < ml_incremental.sql

@@ -16,17 +16,18 @@ Git-style version control for data at scale (`commit`, `branch`, `diff`, `merge`
 | 1 | Concept | The Git moment for data at scale | — |
 | 2 | Concept | **Hands on: every Git primitive, from zero** | [`02-hands-on/`](02-hands-on/) |
 | 3 | Concept | Under the hood: why snapshot/diff/merge are this fast | — |
-| 4 | Data Ops | **Incident rescue**: snapshot / DIFF investigation / PITR | [`04-incident-rescue/`](04-incident-rescue/) |
-| 5 | Data Ops | **Collaborative development**: one branch per engineer | [`05-collaborative-dev/`](05-collaborative-dev/) |
-| 6 | Data Ops | **Write-Audit-Publish**: a release gate for data | [`06-write-audit-publish/`](06-write-audit-publish/) |
-| 7 | AI Training | **ML continuous learning**: train only the delta | [`07-ml-incremental/`](07-ml-incremental/) |
-| 8 | AI Training | **SFT curation**: clean in place, with receipts | [`08-sft-curation/`](08-sft-curation/) |
-| 9 | AI Training | **Collaborative labeling**: disagreement IS the conflict | [`09-labeling-collab/`](09-labeling-collab/) |
-| 10 | AI Training | **RLHF preference data**: consensus, re-judging, reproducibility | [`10-rlhf-preference/`](10-rlhf-preference/) |
-| 11 | AI Training | **Multimodal × lakeFS**: bytes there, catalog here | [`11-multimodal-lakefs/`](11-multimodal-lakefs/) |
-| 12 | Agents | **Agent memory**: versioned, branchable, rewindable | [`12-agent-memory/`](12-agent-memory/) |
-| 13 | Agents | **Agent traces**: queryable, joinable, versioned | [`13-agent-trace/`](13-agent-trace/) |
-| 14 | Agents | **Agent self-evolution** (finale): branch / evaluate / merge / roll back | [`14-agent-evolution/`](14-agent-evolution/) |
+| 4 | Concept | The data-versioning landscape: git4data vs lakeFS / Dolt / Snowflake | — |
+| 5 | Data Ops | **Incident rescue**: snapshot / DIFF investigation / PITR | [`05-incident-rescue/`](05-incident-rescue/) |
+| 6 | Data Ops | **Collaborative development**: one branch per engineer | [`06-collaborative-dev/`](06-collaborative-dev/) |
+| 7 | Data Ops | **Write-Audit-Publish**: a release gate for data | [`07-write-audit-publish/`](07-write-audit-publish/) |
+| 8 | AI Training | **ML continuous learning**: train only the delta | [`08-ml-incremental/`](08-ml-incremental/) |
+| 9 | AI Training | **SFT curation**: clean in place, with receipts | [`09-sft-curation/`](09-sft-curation/) |
+| 10 | AI Training | **Collaborative labeling**: disagreement IS the conflict | [`10-labeling-collab/`](10-labeling-collab/) |
+| 11 | AI Training | **RLHF preference data**: consensus, re-judging, reproducibility | [`11-rlhf-preference/`](11-rlhf-preference/) |
+| 12 | AI Training | **Multimodal × lakeFS**: bytes there, catalog here | [`12-multimodal-lakefs/`](12-multimodal-lakefs/) |
+| 13 | Agents | **Agent memory**: versioned, branchable, rewindable | [`13-agent-memory/`](13-agent-memory/) |
+| 14 | Agents | **Agent traces**: queryable, joinable, versioned | [`14-agent-trace/`](14-agent-trace/) |
+| 15 | Agents | **Agent self-evolution** (finale): branch / evaluate / merge / roll back | [`15-agent-evolution/`](15-agent-evolution/) |
 
 Each later tutorial will add its own folder here.
 

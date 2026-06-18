@@ -1,5 +1,5 @@
 -- =============================================================================
--- Git4Data Tutorial — Part 10: RLHF Preference Data
+-- Git4Data Tutorial — Part 11: RLHF Preference Data
 -- Majority-vote consensus in SQL, disputed pairs re-judged on a branch and
 -- cherry-picked back, then the preference set pinned for reward-model training.
 -- Run:  mysql -h 127.0.0.1 -P 6001 -u root -p111 < rlhf_preference.sql

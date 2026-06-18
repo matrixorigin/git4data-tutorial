@@ -1,5 +1,5 @@
 -- =============================================================================
--- Git4Data Tutorial — Part 9: Collaborative Labeling
+-- Git4Data Tutorial — Part 10: Collaborative Labeling
 -- Each annotator labels on their own branch; disagreement on the same sample
 -- IS the merge conflict; cross-branch SQL finds it before merging; a reviewer
 -- cherry-picks final verdicts.
