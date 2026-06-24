@@ -1,0 +1,47 @@
+<svg viewBox="0 0 1200 470" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif">
+  <defs>
+    <pattern id="g" width="40" height="40" patternUnits="userSpaceOnUse"><path d="M40 0H0V40" fill="none" stroke="#161B22" stroke-width="1"/></pattern>
+    <style>.mono{font-family:ui-monospace,'SF Mono',Menlo,Consolas,monospace;} .h{fill:#E6EDF3;} .m{fill:#9DA7B3;} .dim{fill:#6E7681;}</style>
+  </defs>
+  <rect width="1200" height="470" fill="#0D1117"/><rect width="1200" height="470" fill="url(#g)"/>
+  <text x="70" y="48" class="h" font-size="24" font-weight="700">Three conflict policies: Erin merges in (row 42 collides with Dave, row 20 doesn't)</text>
+  <text x="72" y="74" class="dim" font-size="13">Mainline now: row 42 = Dave's 1.00　·　Erin's branch: row 42 → 2.00 (conflict), row 20 → retired (no conflict)</text>
+
+  <!-- FAIL -->
+  <rect x="60" y="96" width="346" height="320" rx="10" fill="#161B22" stroke="#6E2B25" stroke-width="1.5"/>
+  <text x="82" y="126" class="h" font-size="17" font-weight="700">FAIL (default)</text>
+  <text x="82" y="148" fill="#F0883E" font-size="12.5">any conflict → whole merge rolls back</text>
+  <g class="mono" font-size="13">
+    <rect x="82" y="166" width="302" height="34" rx="4" fill="#2A1413" stroke="#6E2B25"/><text x="96" y="188" fill="#F0883E">row 42　1.00 (unchanged)</text>
+    <rect x="82" y="206" width="302" height="34" rx="4" fill="#2A1413" stroke="#6E2B25"/><text x="96" y="228" fill="#F0883E">row 20　not merged ✗</text>
+  </g>
+  <text x="82" y="286" class="m" font-size="13.5" font-weight="700">all-or-nothing:</text>
+  <text x="82" y="310" class="dim" font-size="12.5">mainline untouched — even the</text>
+  <text x="82" y="328" class="dim" font-size="12.5">non-conflicting row 20 stays out</text>
+
+  <!-- SKIP -->
+  <rect x="426" y="96" width="346" height="320" rx="10" fill="#10233F" stroke="#1F6FEB" stroke-width="1.6"/>
+  <text x="448" y="126" class="h" font-size="17" font-weight="700">SKIP</text>
+  <text x="448" y="148" fill="#79C0FF" font-size="12.5">skip conflicting rows, merge the rest</text>
+  <g class="mono" font-size="13">
+    <rect x="448" y="166" width="302" height="34" rx="4" fill="#102338" stroke="#1F6FEB"/><text x="462" y="188" fill="#79C0FF">row 42　1.00 (keep Dave)</text>
+    <rect x="448" y="206" width="302" height="34" rx="4" fill="#10231A" stroke="#2D6A45"/><text x="462" y="228" fill="#3FB950">row 20　retired (Erin merged ✓)</text>
+  </g>
+  <text x="448" y="286" class="m" font-size="13.5" font-weight="700">conflict yields, rest proceeds:</text>
+  <text x="448" y="310" class="dim" font-size="12.5">only the true collision (42) is</text>
+  <text x="448" y="328" class="dim" font-size="12.5">skipped; other changes merge</text>
+
+  <!-- ACCEPT -->
+  <rect x="792" y="96" width="346" height="320" rx="10" fill="#10233F" stroke="#1F6FEB" stroke-width="1.6"/>
+  <text x="814" y="126" class="h" font-size="17" font-weight="700">ACCEPT</text>
+  <text x="814" y="148" fill="#79C0FF" font-size="12.5">conflict rows take branch value, rest too</text>
+  <g class="mono" font-size="13">
+    <rect x="814" y="166" width="302" height="34" rx="4" fill="#102338" stroke="#1F6FEB"/><text x="828" y="188" fill="#D2A8FF">row 42　2.00 (take Erin)</text>
+    <rect x="814" y="206" width="302" height="34" rx="4" fill="#10231A" stroke="#2D6A45"/><text x="828" y="228" fill="#3FB950">row 20　retired (Erin merged ✓)</text>
+  </g>
+  <text x="814" y="286" class="m" font-size="13.5" font-weight="700">branch wins:</text>
+  <text x="814" y="310" class="dim" font-size="12.5">conflict row 42 takes Erin's 2.00,</text>
+  <text x="814" y="328" class="dim" font-size="12.5">the rest merges as well</text>
+
+  <text x="600" y="448" class="dim" font-size="13" text-anchor="middle">Also cherry-pick: DATA BRANCH PICK … KEYS (…) — promote only the listed rows to mainline</text>
+</svg>

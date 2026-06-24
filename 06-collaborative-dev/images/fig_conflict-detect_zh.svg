@@ -1,0 +1,33 @@
+<svg viewBox="0 0 1200 470" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system,'Segoe UI',Roboto,'PingFang SC','Microsoft YaHei',Arial,sans-serif">
+  <defs>
+    <pattern id="g" width="40" height="40" patternUnits="userSpaceOnUse"><path d="M40 0H0V40" fill="none" stroke="#161B22" stroke-width="1"/></pattern>
+    <style>.mono{font-family:ui-monospace,'SF Mono',Menlo,Consolas,monospace;} .h{fill:#E6EDF3;} .m{fill:#9DA7B3;} .dim{fill:#6E7681;}</style>
+  </defs>
+  <rect width="1200" height="470" fill="#0D1117"/><rect width="1200" height="470" fill="url(#g)"/>
+  <text x="70" y="50" class="h" font-size="24" font-weight="700">冲突判定是行级的：只有"同一行两边都改"才是真冲突</text>
+
+  <!-- LEFT: false conflict -->
+  <rect x="70" y="92" width="500" height="320" rx="10" fill="#161B22" stroke="#2D6A45" stroke-width="1.5"/>
+  <text x="92" y="122" class="h" font-size="17" font-weight="700">改不同行 → 假冲突</text>
+  <text x="92" y="144" fill="#3FB950" font-size="13">数据库自动合并，无人介入</text>
+  <g class="mono" font-size="13.5">
+    <rect x="92" y="160" width="456" height="36" rx="4" fill="#10231A" stroke="#2D6A45"/><text x="106" y="183">行 41　Alice 改 price　<tspan fill="#3FB950">✓ 合入</tspan></text>
+    <rect x="92" y="202" width="456" height="36" rx="4" fill="#161B22" stroke="#30363D"/><text x="106" y="225" class="dim">行 42　（没人动）</text>
+    <rect x="92" y="244" width="456" height="36" rx="4" fill="#10231A" stroke="#2D6A45"/><text x="106" y="267">行 43　Bob 改 status　<tspan fill="#3FB950">✓ 合入</tspan></text>
+  </g>
+  <text x="92" y="322" class="m" font-size="14" font-weight="700">两边碰的是不同的行 →</text>
+  <text x="92" y="348" fill="#3FB950" font-size="14" font-weight="700">两个改动都自动合入，零协调</text>
+
+  <!-- RIGHT: true conflict -->
+  <rect x="630" y="92" width="500" height="320" rx="10" fill="#161B22" stroke="#6E2B25" stroke-width="1.5"/>
+  <text x="652" y="122" class="h" font-size="17" font-weight="700">改同一行 → 真冲突</text>
+  <text x="652" y="144" fill="#F0883E" font-size="13">必须你来裁决（FAIL/SKIP/ACCEPT）</text>
+  <g class="mono" font-size="13.5">
+    <rect x="652" y="170" width="456" height="36" rx="4" fill="#2A1413" stroke="#6E2B25"/><text x="666" y="193" fill="#79C0FF">行 42　Dave 改 price = 1.00</text>
+    <rect x="652" y="212" width="456" height="36" rx="4" fill="#2A1413" stroke="#6E2B25"/><text x="666" y="235" fill="#D2A8FF">行 42　Erin 改 price = 2.00</text>
+  </g>
+  <text x="881" y="290" fill="#F0883E" font-size="26" font-weight="700" text-anchor="middle">⚡ 撞车</text>
+  <text x="652" y="330" class="m" font-size="14" font-weight="700">同一行被两边独立改过 →</text>
+  <text x="652" y="356" fill="#F0883E" font-size="14" font-weight="700">数据库把冲突摆上台面，等你定</text>
+  <text x="652" y="384" class="dim" font-size="12">（哪怕改的是同一行的不同列，也算冲突）</text>
+</svg>

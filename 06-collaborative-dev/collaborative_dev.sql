@@ -1,8 +1,19 @@
 -- =============================================================================
--- Git4Data Tutorial — Part 6: Collaborative Data Development
--- Multiple engineers fork the same table, work in parallel, merge back.
--- Run:  mysql -h 127.0.0.1 -P 6001 -u root -p111 < collaborative_dev.sql
+-- Git4Data Tutorial — Part 6: Collaborative Data Development (Data Ops in Practice)
+-- Many engineers fork the same table, work in parallel, review, merge, resolve.
+--
+-- Companion to "Git4Data Deep Dive (Part 6) · Data Operations in Practice —
+-- Collaborative Data Development: Merge Data the Way You Merge Code".
+--
+-- Verified end to end on MatrixOne v4.0.0-rc3.
+--     docker run -d -p 6001:6001 --name matrixone matrixorigin/matrixone:4.0.0-rc3
+--     mysql -h 127.0.0.1 -P 6001 -u root -p111 < collaborative_dev.sql
 -- =============================================================================
+
+-- Defensive cleanup so the script is re-runnable (a snapshot is account-scoped
+-- and survives DROP DATABASE).
+DROP SNAPSHOT IF EXISTS team_base;
+DROP DATABASE IF EXISTS collab_demo;
 
 CREATE DATABASE collab_demo;
 USE collab_demo;
@@ -26,16 +37,17 @@ FROM generate_series(1, 100000) g;
 -- Pin the starting point the whole team forks from.
 CREATE SNAPSHOT team_base FOR TABLE collab_demo products;
 
--- ---------------------------------------------------------------- fork x3
--- Each engineer gets their own lineage-tracked branch.
+
+-- =============================================================================
+-- SCENARIO 1 — several people maintain one master table in parallel
+-- =============================================================================
 DATA BRANCH CREATE TABLE products_alice FROM products;
 DATA BRANCH CREATE TABLE products_bob   FROM products;
 DATA BRANCH CREATE TABLE products_carol FROM products;
 
--- Division of work — IMPORTANT: split by ROW RANGES, not by columns.
--- Conflicts are detected per ROW: if Alice changes the price and Bob the
--- description of the SAME row, that's still a conflict. Disjoint row ranges
--- guarantee clean merges.
+-- Division of work — IMPORTANT: split by ROW RANGES, not by columns. Conflicts
+-- are detected per ROW: changing different columns of the SAME row still
+-- conflicts. Disjoint key ranges guarantee clean merges.
 UPDATE products_alice SET price = round(price * 1.10, 2)
 WHERE category = 'A' AND product_id <= 30000;
 UPDATE products_bob   SET descr = concat('backfilled_', product_id)
@@ -43,43 +55,77 @@ WHERE descr IS NULL AND product_id BETWEEN 30001 AND 60000;
 UPDATE products_carol SET status = 'retired'
 WHERE product_id BETWEEN 90000 AND 95000;
 
--- ---------------------------------------------------------- self-review
--- Before merging, each engineer reviews their own change set, row-level.
-DATA BRANCH DIFF products_alice AGAINST products OUTPUT SUMMARY;
-DATA BRANCH DIFF products_bob   AGAINST products OUTPUT SUMMARY;
-DATA BRANCH DIFF products_carol AGAINST products OUTPUT SUMMARY;
+-- Self-review before merging (row-level, like glancing at your own diff).
+DATA BRANCH DIFF products_alice AGAINST products OUTPUT SUMMARY;   -- UPDATED 10000
+DATA BRANCH DIFF products_bob   AGAINST products OUTPUT SUMMARY;   -- UPDATED  3000
+DATA BRANCH DIFF products_carol AGAINST products OUTPUT SUMMARY;   -- UPDATED  5001
 
--- ---------------------------------------------------------- merge back
--- Non-overlapping changes merge cleanly, in any order, no coordination.
+-- Disjoint ranges -> merge cleanly, in any order, no coordination.
 DATA BRANCH MERGE products_alice INTO products;
 DATA BRANCH MERGE products_bob   INTO products;
 DATA BRANCH MERGE products_carol INTO products;
 
--- Mainline now carries all three change sets.
-SELECT COUNT(*) FROM products WHERE descr LIKE 'backfilled%';
-SELECT COUNT(*) FROM products WHERE status = 'retired';
+SELECT COUNT(*) AS backfilled FROM products WHERE descr LIKE 'backfilled%';   -- 3000
+SELECT COUNT(*) AS retired    FROM products WHERE status = 'retired';         -- 5001
 
--- ------------------------------------------------- when work overlaps
--- Dave and Erin both touch the same row -> a genuine collision.
+DROP TABLE products_alice; DROP TABLE products_bob; DROP TABLE products_carol;
+
+
+-- =============================================================================
+-- SCENARIO 2 — turn a data change into a reviewable PR
+-- =============================================================================
+DATA BRANCH CREATE TABLE products_fix_1837 FROM products;
+UPDATE products_fix_1837 SET category = 'A'
+WHERE category = 'C' AND name LIKE 'prod_1%';        -- a category correction
+
+-- Reviewer: scope, then row by row, then keep a .sql patch for the record.
+DATA BRANCH DIFF products_fix_1837 AGAINST products OUTPUT SUMMARY;
+DATA BRANCH DIFF products_fix_1837 AGAINST products OUTPUT LIMIT 20;
+DATA BRANCH DIFF products_fix_1837 AGAINST products OUTPUT FILE '/tmp';
+
+-- Approve -> merge ;  or reject -> DROP TABLE products_fix_1837 (production never touched).
+DATA BRANCH MERGE products_fix_1837 INTO products;
+DROP TABLE products_fix_1837;
+
+
+-- =============================================================================
+-- WHEN TWO PEOPLE COLLIDE — true vs false conflict, three policies
+-- =============================================================================
 DATA BRANCH CREATE TABLE products_dave FROM products;
 DATA BRANCH CREATE TABLE products_erin FROM products;
-UPDATE products_dave SET price = 1.00 WHERE product_id = 42;
-UPDATE products_erin SET price = 2.00 WHERE product_id = 42;
+UPDATE products_dave SET price = 1.00 WHERE product_id = 42;          -- Dave: row 42
+UPDATE products_erin SET price = 2.00 WHERE product_id = 42;          -- Erin: row 42 (collision)
+UPDATE products_erin SET status = 'retired' WHERE product_id = 20;    -- Erin: row 20 (no conflict)
 
-DATA BRANCH MERGE products_dave INTO products;
--- Erin now collides on product_id=42. Default policy FAIL aborts and rolls
--- back, mainline untouched. Uncomment to see the error:
+DATA BRANCH MERGE products_dave INTO products;        -- Dave lands first; mainline 42 = 1.00
+
+-- (1) FAIL (default): on ANY conflict the WHOLE merge aborts (even row 20 stays out).
+--     Expected to error; uncomment to see it:
 -- DATA BRANCH MERGE products_erin INTO products WHEN CONFLICT FAIL;
 
--- Resolve explicitly: keep mainline (Dave landed first), skip Erin's row.
+-- (2) SKIP: skip only the conflicting row; the rest merges.
 DATA BRANCH MERGE products_erin INTO products WHEN CONFLICT SKIP;
-SELECT price FROM products WHERE product_id = 42;   -- 1.00 (Dave's)
+SELECT price  FROM products WHERE product_id = 42;    -- 1.00   (Dave kept)
+SELECT status FROM products WHERE product_id = 20;    -- retired (Erin merged)
 
--- ---------------------------------------------------------------- cleanup
-DROP TABLE products_alice;
-DROP TABLE products_bob;
-DROP TABLE products_carol;
-DROP TABLE products_dave;
-DROP TABLE products_erin;
+-- (3) ACCEPT: conflicting row takes the branch value. (Separate branch to show it.)
+DATA BRANCH CREATE TABLE products_frank FROM products;
+UPDATE products_frank SET price = 42.42 WHERE product_id = 42;
+DATA BRANCH MERGE products_frank INTO products WHEN CONFLICT ACCEPT;
+SELECT price FROM products WHERE product_id = 42;     -- 42.42  (Frank's, branch wins)
+
+-- cherry-pick: promote only chosen rows (PICK needs a primary key).
+DATA BRANCH CREATE TABLE products_pick FROM products;
+UPDATE products_pick SET status = 'hotfix' WHERE product_id IN (50, 51, 52);
+DATA BRANCH PICK products_pick INTO products KEYS (50, 51) WHEN CONFLICT FAIL;
+SELECT product_id, status FROM products WHERE product_id IN (50, 51, 52) ORDER BY product_id;
+--   50 hotfix · 51 hotfix · 52 active   (only the picked keys were promoted)
+
+DROP TABLE products_dave; DROP TABLE products_erin; DROP TABLE products_frank; DROP TABLE products_pick;
+
+
+-- =============================================================================
+-- CLEANUP
+-- =============================================================================
 DROP SNAPSHOT IF EXISTS team_base;
 DROP DATABASE IF EXISTS collab_demo;
