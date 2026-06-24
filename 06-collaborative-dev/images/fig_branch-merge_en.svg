@@ -17,18 +17,18 @@
 
   <g>
     <rect x="500" y="180" width="220" height="46" rx="8" fill="#161B22" stroke="#8957E5" stroke-width="1.4"/>
-    <text x="516" y="200" class="h" font-size="13" font-weight="700">products_alice</text>
-    <text x="516" y="218" class="dim" font-size="12">reprice A (1–30000)</text>
+    <text x="516" y="200" class="h" font-size="13" font-weight="700">products_pricing</text>
+    <text x="516" y="218" class="dim" font-size="12">pricing: sale price (1–30000)</text>
   </g>
   <g>
     <rect x="500" y="262" width="220" height="46" rx="8" fill="#161B22" stroke="#8957E5" stroke-width="1.4"/>
-    <text x="516" y="282" class="h" font-size="13" font-weight="700">products_bob</text>
-    <text x="516" y="300" class="dim" font-size="12">backfill (30001–60000)</text>
+    <text x="516" y="282" class="h" font-size="13" font-weight="700">products_ops</text>
+    <text x="516" y="300" class="dim" font-size="12">ops: promo copy (30001–60000)</text>
   </g>
   <g>
     <rect x="500" y="344" width="220" height="46" rx="8" fill="#161B22" stroke="#8957E5" stroke-width="1.4"/>
-    <text x="516" y="364" class="h" font-size="13" font-weight="700">products_carol</text>
-    <text x="516" y="382" class="dim" font-size="12">retire (90000–95000)</text>
+    <text x="516" y="364" class="h" font-size="13" font-weight="700">products_catalog</text>
+    <text x="516" y="382" class="dim" font-size="12">catalog: retire (90000–95000)</text>
   </g>
 
   <g fill="none" stroke="#6E7681" stroke-width="1.6">
