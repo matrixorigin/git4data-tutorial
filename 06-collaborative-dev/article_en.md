@@ -6,7 +6,7 @@ How do teams collaborate without version control? Mostly by talking: "I'm workin
 
 git4data brings the GitHub model to data, intact: **one branch per person, work in parallel, self-review, merge back to mainline, conflicts adjudicated by the database.**
 
-> 📦 Full runnable SQL: [`06-collaborative-dev/`](https://github.com/matrixorigin/git4data-tutorial) in the companion repo. Same setup as before (`matrixone:4.0.0-rc1` + a 100k-row `products` table).
+> 📦 Full runnable SQL: [`06-collaborative-dev/`](https://github.com/matrixorigin/git4data-tutorial) in the companion repo. Same setup as before (`matrixone:4.0.0-rc3` + a 100k-row `products` table).
 
 ---
 

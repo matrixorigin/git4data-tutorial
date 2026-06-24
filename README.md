@@ -37,7 +37,7 @@ next to the runnable SQL.
 
 ```bash
 # 1. Run a local MatrixOne (open source, MySQL-compatible)
-docker run -d -p 6001:6001 --name matrixone matrixorigin/matrixone:4.0.0-rc1
+docker run -d -p 6001:6001 --name matrixone matrixorigin/matrixone:4.0.0-rc3
 
 # 2. Run the Part 2 walkthrough — every Git primitive on 1,000,000 rows
 mysql -h 127.0.0.1 -P 6001 -u root -p111 < 02-hands-on/git4data_primitives.sql
@@ -68,7 +68,7 @@ files needed) and cleans up after itself.
 Same table, same operations, on a single-node Docker MatrixOne (diff/merge each
 touch only 1,000 rows):
 
-Steady-state, median of several runs (MatrixOne 4.0.0-rc1):
+Steady-state, median of several runs (MatrixOne 4.0.0-rc3):
 
 | table size | load | `CREATE SNAPSHOT` | `CLONE` | `DATA BRANCH CREATE` | `DIFF` (1000) | `MERGE` (1000) |
 |---|---|---|---|---|---|---|

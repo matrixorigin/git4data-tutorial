@@ -1,0 +1,37 @@
+<svg viewBox="0 0 1200 500" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system,'Segoe UI',Roboto,'PingFang SC','Microsoft YaHei',Arial,sans-serif">
+  <defs>
+    <pattern id="g" width="40" height="40" patternUnits="userSpaceOnUse"><path d="M40 0H0V40" fill="none" stroke="#161B22" stroke-width="1"/></pattern>
+    <style>.mono{font-family:ui-monospace,'SF Mono',Menlo,Consolas,monospace;} .h{fill:#E6EDF3;} .m{fill:#9DA7B3;} .dim{fill:#6E7681;}</style>
+  </defs>
+  <rect width="1200" height="500" fill="#0D1117"/><rect width="1200" height="500" fill="url(#g)"/>
+  <text x="70" y="52" class="h" font-size="24" font-weight="700">整表回滚 vs 定点修复（事故后还在成交时）</text>
+  <text x="72" y="78" class="dim" font-size="13.5">事故：order ≤ 500 的 amount 被改成 0；之后又进来两笔正常新订单（90001 / 90002）</text>
+
+  <!-- LEFT: full rollback -->
+  <rect x="70" y="104" width="510" height="330" rx="10" fill="#161B22" stroke="#F0883E" stroke-width="1.4"/>
+  <text x="92" y="134" class="h" font-size="17" font-weight="700">整表回滚　RESTORE TABLE {SNAPSHOT}</text>
+  <text x="92" y="158" class="dim" font-size="12.5">整张表拨回快照那一刻</text>
+  <g class="mono" font-size="14">
+    <rect x="92" y="176" width="466" height="34" rx="4" fill="#10231A" stroke="#2D6A45"/><text x="106" y="198" fill="#3FB950">id 88231  amount 0 → 119　已还原 ✓</text>
+    <rect x="92" y="216" width="466" height="34" rx="4" fill="#10231A" stroke="#2D6A45"/><text x="106" y="238" fill="#3FB950">id 88232  amount 0 → 98 　已还原 ✓</text>
+    <rect x="92" y="262" width="466" height="34" rx="4" fill="#2A1413" stroke="#6E2B25"/><text x="106" y="284" fill="#F0883E">id 90001  新订单 250　 没了 ✗</text>
+    <rect x="92" y="302" width="466" height="34" rx="4" fill="#2A1413" stroke="#6E2B25"/><text x="106" y="324" fill="#F0883E">id 90002  新订单 88 　 没了 ✗</text>
+  </g>
+  <text x="92" y="372" fill="#F0883E" font-size="14" font-weight="700">简单 —— 但事故后的新订单一起被抹掉</text>
+  <text x="92" y="400" class="dim" font-size="12.5">适用：半夜 / 已锁表 / 事故后确无正常写入</text>
+
+  <!-- RIGHT: surgical repair -->
+  <rect x="620" y="104" width="510" height="330" rx="10" fill="#10233F" stroke="#1F6FEB" stroke-width="1.8"/>
+  <text x="642" y="134" class="h" font-size="17" font-weight="700">定点修复　UPDATE … JOIN 快照</text>
+  <text x="642" y="158" class="dim" font-size="12.5">只回填受损行，其余一概不动</text>
+  <g class="mono" font-size="14">
+    <rect x="642" y="176" width="466" height="34" rx="4" fill="#10231A" stroke="#2D6A45"/><text x="656" y="198" fill="#3FB950">id 88231  amount 0 → 119　已还原 ✓</text>
+    <rect x="642" y="216" width="466" height="34" rx="4" fill="#10231A" stroke="#2D6A45"/><text x="656" y="238" fill="#3FB950">id 88232  amount 0 → 98 　已还原 ✓</text>
+    <rect x="642" y="262" width="466" height="34" rx="4" fill="#102338" stroke="#1F6FEB"/><text x="656" y="284" fill="#79C0FF">id 90001  新订单 250　 保留 ✓</text>
+    <rect x="642" y="302" width="466" height="34" rx="4" fill="#102338" stroke="#1F6FEB"/><text x="656" y="324" fill="#79C0FF">id 90002  新订单 88 　 保留 ✓</text>
+  </g>
+  <text x="642" y="372" fill="#79C0FF" font-size="14" font-weight="700">受损行还原 + 新订单全留下</text>
+  <text x="642" y="400" class="dim" font-size="12.5">适用：生产库还在成交时 —— 这是你想要的</text>
+
+  <text x="600" y="466" class="m" font-size="13.5" text-anchor="middle">先用 DIFF 看清损失，再在这两条路里选 —— 两者都只是一两条 SQL</text>
+</svg>

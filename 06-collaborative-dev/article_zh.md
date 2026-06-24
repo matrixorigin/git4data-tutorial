@@ -6,7 +6,7 @@
 
 git4data 把 GitHub 的协作模式原样搬给数据：**每人一条分支，并行干活，改完自查，合并回主线，冲突由数据库裁决。**
 
-> 📦 本文 SQL 可整体跑通：[matrixorigin/git4data-tutorial](https://github.com/matrixorigin/git4data-tutorial) 的 `06-collaborative-dev/`。环境照旧（`matrixone:4.0.0-rc1` + 一张 10 万行的 `products` 表）。
+> 📦 本文 SQL 可整体跑通：[matrixorigin/git4data-tutorial](https://github.com/matrixorigin/git4data-tutorial) 的 `06-collaborative-dev/`。环境照旧（`matrixone:4.0.0-rc3` + 一张 10 万行的 `products` 表）。
 
 ---
 
