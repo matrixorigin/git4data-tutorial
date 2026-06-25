@@ -212,8 +212,6 @@ SELECT COUNT(*) FROM orders;       -- 1000000, schema and data back, intact
 
 Measured: **a dropped 1M-row table, restored whole-database from PITR, not a row missing.** In the traditional playbook this is a "major incident, all hands, spin up a backup instance" event; here it's one SQL statement and a few seconds. `TRUNCATE`, a dropped whole database — same.
 
-> ⚠ **A timing trap (we hit it in testing)**: a PITR has a valid-from boundary (roughly its creation time). If you restore to a second-precision timestamp **right after** creating the PITR, you may get `input timestamp ... is less than the pitr valid time`. Wait 1–2 seconds, or check `SHOW PITR` for its start. Which, again, is why **PITR should be standing configuration, not something you create after the incident.**
-
 ---
 
 ## Getting recovery right: one decision tree
