@@ -133,7 +133,7 @@ WHERE  o.amount <> s.amount OR o.status <> s.status;   -- expect 0
 DROP TABLE orders_snap;
 ```
 
-> **A detail confirmed in testing**: `DATA BRANCH DIFF t AGAINST t{SNAPSHOT=s}` answers "**which rows have been touched since the snapshot**" — it counts *was it changed*, not *does the current value happen to match again*. So after surgical repair, a re-DIFF still lists those 500 rows as UPDATED (they really were written, twice); that's exactly the semantics you want for damage assessment. To confirm the *values* were restored, use the value comparison above, not another DIFF.
+> Tip: to confirm the *values* were restored, the value-comparison query in step 3 is the most direct check; `DATA BRANCH DIFF` is better suited to quickly sizing **how many rows an incident touched** the moment it happens. Different tools for different jobs.
 
 This is really a hand-rolled three-way merge: with the **snapshot** as the base, restore the "damaged" rows and keep the "inserted-after-the-accident" rows. The one edge to watch: if a row was **legitimately updated again after the accident**, the `WHERE` above will also pull it back to the snapshot value (a true conflict). Such rows are usually rare — pull them out separately with DIFF and review by hand. (And by the way: this "base-aware merge that auto-distinguishes true from false conflicts" is a built-in command — `DATA BRANCH MERGE` — which is the star of the next article. Here we run the principle by hand with plain SQL.)
 
@@ -238,9 +238,9 @@ The demos above were at table and database level, but this safety net is **full-
 | Incident scope | Save | Recover |
 |---|---|---|
 | One table | `CREATE SNAPSHOT s FOR TABLE db t` | `RESTORE TABLE db.t {SNAPSHOT = s}` |
-| One database (multi-table consistent) | `CREATE SNAPSHOT s FOR DATABASE db` | `RESTORE DATABASE db FROM PITR p "moment"` |
-| One account (tenant) | `CREATE SNAPSHOT s FOR ACCOUNT acc` | `RESTORE ACCOUNT acc FROM SNAPSHOT s` |
-| The whole cluster | `CREATE SNAPSHOT s FOR CLUSTER` | `RESTORE CLUSTER FROM SNAPSHOT s` |
+| One database (multi-table consistent) | `CREATE SNAPSHOT s FOR DATABASE db` | `RESTORE DATABASE db {SNAPSHOT = s}` |
+| One account (tenant) | `CREATE SNAPSHOT s FOR ACCOUNT acc` | `RESTORE ACCOUNT acc {SNAPSHOT = s}` |
+| The whole cluster | `CREATE SNAPSHOT s FOR CLUSTER` | `RESTORE CLUSTER {SNAPSHOT = s}` |
 
 The database level is especially worth remembering: **database-level snapshot/restore is multi-table atomic** — the orders table, the inventory table, and the ledger table all return to the same instant together, with no torn state where one table went back and another didn't. For a business whose consistency is held by several tables at once, that often matters more than "can recover" itself.
 

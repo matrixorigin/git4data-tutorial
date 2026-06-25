@@ -86,9 +86,9 @@ JOIN   orders_snap s ON o.order_id = s.order_id
 SET    o.amount = s.amount, o.status = s.status
 WHERE  o.amount <> s.amount OR o.status <> s.status;
 
--- Verify by VALUE (not by DIFF): current table should equal the snapshot, 0 off.
--- (DIFF vs the snapshot reports rows TOUCHED since it, so it would still list
---  these 500 as UPDATED — that's the assessment semantics, not a value check.)
+-- Verify by VALUE: current table should equal the snapshot, 0 rows off. (Value
+-- comparison is the most direct check that the repair restored the right values;
+-- DIFF is better for sizing how many rows an incident touched.)
 SELECT COUNT(*) AS value_mismatch
 FROM   orders o JOIN orders_snap s ON o.order_id = s.order_id
 WHERE  o.amount <> s.amount OR o.status <> s.status;        -- expect 0
@@ -152,9 +152,9 @@ SELECT now();
 --   scope     | save                                | recover
 --   ----------+-------------------------------------+----------------------------------------
 --   table     | CREATE SNAPSHOT s FOR TABLE db t    | RESTORE TABLE db.t {SNAPSHOT = s}
---   database  | CREATE SNAPSHOT s FOR DATABASE db   | RESTORE DATABASE db FROM PITR p "ts"
---   account   | CREATE SNAPSHOT s FOR ACCOUNT acc   | RESTORE ACCOUNT acc FROM SNAPSHOT s
---   cluster   | CREATE SNAPSHOT s FOR CLUSTER       | RESTORE CLUSTER FROM SNAPSHOT s
+--   database  | CREATE SNAPSHOT s FOR DATABASE db   | RESTORE DATABASE db {SNAPSHOT = s}
+--   account   | CREATE SNAPSHOT s FOR ACCOUNT acc   | RESTORE ACCOUNT acc {SNAPSHOT = s}
+--   cluster   | CREATE SNAPSHOT s FOR CLUSTER       | RESTORE CLUSTER {SNAPSHOT = s}
 -- Database-level snapshot/restore is multi-table ATOMIC.
 
 
