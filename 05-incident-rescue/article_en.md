@@ -22,11 +22,11 @@ Eighty percent of a rescue is decided **before** the accident. git4data makes "d
 CREATE DATABASE rescue_demo;
 USE rescue_demo;
 
--- A 1-day continuous protection window for the whole database. Configure once.
+-- A rolling 1-day protection window for the whole database. Configure once.
 CREATE PITR ops_pitr FOR DATABASE rescue_demo RANGE 1 'd';
 ```
 
-Once configured, PITR works quietly in the background, and **it protects the entire window after its creation** — any second inside that window is recoverable, whether or not you ever took a manual snapshot. The window length (`RANGE 1 'd'`) is your RPO: set it to 1 day, 7 days, whatever your business can tolerate looking back. **The point is that it has to exist before the incident** — creating it afterward is too late.
+Once configured, PITR works quietly in the background, maintaining a **rolling recovery window of the most recent stretch** — any second inside it is recoverable, whether or not you ever took a manual snapshot. The window length (`RANGE 1 'd'`) is your RPO and lookback depth: set it to 1 day, 7 days, whatever your business can tolerate. The catch is that this window **keeps rolling forward**: moments older than the window length slide out of protection and are no longer guaranteed recoverable. So PITR is your **short-term continuous backstop** — and it **has to exist before the incident**; creating it afterward is too late.
 
 **Second: before any risky bulk operation, casually take a snapshot.**
 
@@ -44,9 +44,14 @@ FROM generate_series(1, 1000000) g;          -- 1,000,000 rows, seconds
 
 Part 2 measured it: snapshotting a 1M-row (even 100M-row) table takes **5–8 milliseconds** — it only records a moment and protects that moment's objects (Part 3 explained why). Which means snapshots carry **zero psychological cost**: take one before every change, the way you hit Ctrl+S while writing a document.
 
-Remember the division of labor: **a snapshot is a precise save point you place by hand — good for surgical repair; PITR is a safety net woven automatically in the background — it catches the moments you didn't save, and even a dropped table.** The four scenarios below lean on this pair again and again.
+Remember the division of labor — these are **two independent capabilities, each covering a different timescale**:
 
-![Two safety nets: snapshots are precise save points you place by hand on the timeline; PITR is a continuous protection window covering everything after its creation](./images/fig_safety-nets_en.svg)
+> - **PITR is the automatic, forward-rolling "continuous net."** Any second in the recent window is recoverable (even moments you never saved, even a dropped table), but it only protects **inside the window** — older moments roll off as the window advances.
+> - **A snapshot is a named save point you place by hand, and once taken it persists.** It **doesn't expire** (until you drop it), which makes it the right tool to pin a "known-good state" (before a release, a quarterly close, a training-data cut) — so even weeks later, after the PITR window has long rolled past that moment, you can still DIFF against it, surgically repair from it, or restore it.
+
+The four scenarios below lean on this pair again and again.
+
+![Two safety nets: a snapshot is a durable, named save point you place by hand; PITR is a forward-rolling short-term window that only protects the most recent stretch](./images/fig_safety-nets_en.svg)
 
 ---
 
@@ -250,7 +255,7 @@ The honest notes you want before you try this in production:
 
 - **Creation is near-free; long-term retention is not.** Snapshots and PITR are milliseconds to create and take almost no space — but **the historical objects pinned by a snapshot or PITR are not reclaimed by background GC**; they hold storage until the snapshot/PITR is dropped. So: `DROP SNAPSHOT` your short-lived "before-change" snapshots once done; size the PITR window to your RPO, don't blindly stretch it to 30 days.
 - **PITR recovery is whole-database and overwriting.** It's best for structural disasters (DROP/TRUNCATE/whole-database pollution). To "repair only some rows while keeping the rest of the new writes," use a snapshot + surgical repair, not PITR.
-- **The timing boundary.** PITR only protects the window after its creation; your restore timestamp must fall inside the valid range shown by `SHOW PITR`.
+- **The timing boundary.** PITR only protects the recent rolling window — older moments have rolled off and need a snapshot; your restore timestamp must fall inside the valid range shown by `SHOW PITR`.
 - **DIFF first, act second.** This is the habit to take away: the recovery actions (rollback / surgical repair / PITR) are all cheap; **the expensive part is the judgment**, and DIFF is the step that grounds that judgment in fact rather than guesswork.
 
 ---
