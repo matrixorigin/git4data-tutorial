@@ -260,6 +260,49 @@ The honest notes you want before you try this in production:
 
 ---
 
+## The baseline: how would a traditional MySQL stack rescue the same incidents?
+
+In MatrixOne the four scenarios above are mostly "one or two SQL statements, seconds." It's worth looking back at what the same incidents take on a traditional MySQL stack — which is exactly where most teams live today.
+
+MySQL has no first-class "snapshot" or "built-in PITR." Its point-in-time recovery is the classic **full backup + binlog replay**, and one run looks roughly like this:
+
+1. **Find a spare machine and restore a full backup first.** From the latest `mysqldump` or a physical backup (XtraBackup), load the whole database into a **brand-new recovery instance** — you can't recover in place on production. For a large database that load alone is tens of minutes to hours.
+2. **Hand-locate the bad statement's position in the binlog.** Use `mysqlbinlog` to scan the binary logs and find which position or GTID that `UPDATE` / `DROP` landed on:
+   ```bash
+   mysqlbinlog --start-datetime="2026-06-25 02:00:00" binlog.000123 | grep -n "UPDATE orders"
+   ```
+3. **Replay up to the moment before the incident.** Re-execute the binlog between "after the backup point" and "before the bad statement" — event by event, so hours of log take hours to replay:
+   ```bash
+   mysqlbinlog --stop-position=448291 binlog.000123 | mysql -h recovery_host
+   ```
+4. **Then move the data back to production.** The recovery instance now holds the pre-incident state; you still have to **export, compare, and merge** the data you need back into the production database that's still taking orders.
+
+The real pain is a handful of problems baked into this flow:
+
+- **It needs a spare instance plus a full extra copy of disk.** Rescuing a 500-row fat-finger still means reviving the entire database first.
+- **The granularity is the whole database / instance.** Want to roll just the `orders` table back to a moment? You can't — you restore everything and pick from it.
+- **The prerequisites are hard, and you often discover they weren't met only after the incident.** `log_bin` must have been on all along, the binlog must not have been purged early by `binlog_expire_logs_seconds`, and the format had better be ROW — miss any one and PITR is simply off the table.
+- **The stop-position is manual and easy to get wrong.** Scan one transaction too many or too few and you either don't fully roll back or you clobber good data.
+- **The worst part: you can't keep the legitimate writes that came after.** Standard PITR stops before the bad statement, so the real orders that landed afterward **vanish with it**; to keep them you have to **skip exactly that one bad transaction and replay all the rest** (hand `--exclude-gtids` / GTID surgery) — one slip and you're inconsistent. This is precisely what Scenario 1's "surgical repair" does in a single SQL, and on MySQL it's a nightmare.
+- **There's no cheap "see the damage."** MySQL gives you no `DIFF`; to learn how many rows changed and which ones, you first restore the pre-incident state to a side instance, then write SQL to compare row by row.
+
+> Managed flavors (RDS / Aurora) turn "find the backup, configure binlog" into a console button, which genuinely helps — but **the essence is unchanged**: it still restores to a **new instance** (not in place), still at **whole-database granularity**, still takes tens of minutes, and you still have to **reconcile and move the data back** yourself afterward — and you pay for a whole extra instance for the privilege.
+
+The contrast in one table:
+
+| | Traditional MySQL PITR | MatrixOne git4data |
+|---|---|---|
+| Restore granularity | whole database / instance | table / database / account / cluster, your pick |
+| Extra instance | required (full extra disk) | none, in place |
+| Time | backup load + event-by-event binlog replay, **hours** | **seconds** |
+| See the damage | restore to a side instance, compare by hand | one `DATA BRANCH DIFF` |
+| Keep post-incident writes | hand-skip GTIDs, error-prone | surgical repair / `MERGE`, separated for free |
+| Prerequisites | binlog on early, not purged, right format | one `CREATE SNAPSHOT` / `CREATE PITR` beforehand |
+
+The bottom line: MySQL treats point-in-time recovery as a **major-incident engineering project**; git4data collapses it into **one everyday SQL statement**. That gap is the most tangible operational difference that "version-controlling data like code" actually buys you.
+
+---
+
 ## The one-page rescue card
 
 This whole article, compressed into a card you could pin at your desk:
