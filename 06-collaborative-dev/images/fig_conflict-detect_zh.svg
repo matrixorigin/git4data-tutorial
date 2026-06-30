@@ -11,9 +11,9 @@
   <text x="92" y="122" class="h" font-size="17" font-weight="700">改不同行 → 假冲突</text>
   <text x="92" y="144" fill="#3FB950" font-size="13">数据库自动合并，无人介入</text>
   <g class="mono" font-size="13.5">
-    <rect x="92" y="160" width="456" height="36" rx="4" fill="#10231A" stroke="#2D6A45"/><text x="106" y="183">行 41　Alice 改 price　<tspan fill="#3FB950">✓ 合入</tspan></text>
-    <rect x="92" y="202" width="456" height="36" rx="4" fill="#161B22" stroke="#30363D"/><text x="106" y="225" class="dim">行 42　（没人动）</text>
-    <rect x="92" y="244" width="456" height="36" rx="4" fill="#10231A" stroke="#2D6A45"/><text x="106" y="267">行 43　Bob 改 status　<tspan fill="#3FB950">✓ 合入</tspan></text>
+    <rect x="92" y="160" width="456" height="36" rx="4" fill="#10231A" stroke="#2D6A45"/><text x="106" y="183">user 41　Alice 改 monetary　<tspan fill="#3FB950">✓ 合入</tspan></text>
+    <rect x="92" y="202" width="456" height="36" rx="4" fill="#161B22" stroke="#30363D"/><text x="106" y="225" class="dim">user 42　（没人动）</text>
+    <rect x="92" y="244" width="456" height="36" rx="4" fill="#10231A" stroke="#2D6A45"/><text x="106" y="267">user 43　Bob 改 label　<tspan fill="#3FB950">✓ 合入</tspan></text>
   </g>
   <text x="92" y="322" class="m" font-size="14" font-weight="700">两边碰的是不同的行 →</text>
   <text x="92" y="348" fill="#3FB950" font-size="14" font-weight="700">两个改动都自动合入，零协调</text>
@@ -23,8 +23,8 @@
   <text x="652" y="122" class="h" font-size="17" font-weight="700">改同一行 → 真冲突</text>
   <text x="652" y="144" fill="#F0883E" font-size="13">必须你来裁决（FAIL/SKIP/ACCEPT）</text>
   <g class="mono" font-size="13.5">
-    <rect x="652" y="170" width="456" height="36" rx="4" fill="#2A1413" stroke="#6E2B25"/><text x="666" y="193" fill="#79C0FF">行 42　Dave 改 price = 1.00</text>
-    <rect x="652" y="212" width="456" height="36" rx="4" fill="#2A1413" stroke="#6E2B25"/><text x="666" y="235" fill="#D2A8FF">行 42　Erin 改 price = 2.00</text>
+    <rect x="652" y="170" width="456" height="36" rx="4" fill="#2A1413" stroke="#6E2B25"/><text x="666" y="193" fill="#79C0FF">user 42　Alice 改 monetary=11.00</text>
+    <rect x="652" y="212" width="456" height="36" rx="4" fill="#2A1413" stroke="#6E2B25"/><text x="666" y="235" fill="#D2A8FF">user 42　Bob 改 monetary=22.00</text>
   </g>
   <text x="881" y="290" fill="#F0883E" font-size="26" font-weight="700" text-anchor="middle">⚡ 撞车</text>
   <text x="652" y="330" class="m" font-size="14" font-weight="700">同一行被两边独立改过 →</text>

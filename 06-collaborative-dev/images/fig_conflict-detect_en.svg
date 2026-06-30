@@ -11,9 +11,9 @@
   <text x="92" y="122" class="h" font-size="17" font-weight="700">Different rows → false conflict</text>
   <text x="92" y="144" fill="#3FB950" font-size="13">auto-merged, nobody involved</text>
   <g class="mono" font-size="13.5">
-    <rect x="92" y="160" width="456" height="36" rx="4" fill="#10231A" stroke="#2D6A45"/><text x="106" y="183">row 41　Alice → price　<tspan fill="#3FB950">✓ merged</tspan></text>
-    <rect x="92" y="202" width="456" height="36" rx="4" fill="#161B22" stroke="#30363D"/><text x="106" y="225" class="dim">row 42　(nobody)</text>
-    <rect x="92" y="244" width="456" height="36" rx="4" fill="#10231A" stroke="#2D6A45"/><text x="106" y="267">row 43　Bob → status　<tspan fill="#3FB950">✓ merged</tspan></text>
+    <rect x="92" y="160" width="456" height="36" rx="4" fill="#10231A" stroke="#2D6A45"/><text x="106" y="183">user 41　Alice → monetary　<tspan fill="#3FB950">✓ merged</tspan></text>
+    <rect x="92" y="202" width="456" height="36" rx="4" fill="#161B22" stroke="#30363D"/><text x="106" y="225" class="dim">user 42　(nobody)</text>
+    <rect x="92" y="244" width="456" height="36" rx="4" fill="#10231A" stroke="#2D6A45"/><text x="106" y="267">user 43　Bob → label　<tspan fill="#3FB950">✓ merged</tspan></text>
   </g>
   <text x="92" y="322" class="m" font-size="14" font-weight="700">the two sides touched different rows →</text>
   <text x="92" y="348" fill="#3FB950" font-size="14" font-weight="700">both changes auto-merge, zero coordination</text>
@@ -23,8 +23,8 @@
   <text x="652" y="122" class="h" font-size="17" font-weight="700">Same row → true conflict</text>
   <text x="652" y="144" fill="#F0883E" font-size="13">you must adjudicate (FAIL/SKIP/ACCEPT)</text>
   <g class="mono" font-size="13.5">
-    <rect x="652" y="170" width="456" height="36" rx="4" fill="#2A1413" stroke="#6E2B25"/><text x="666" y="193" fill="#79C0FF">row 42　Dave → price = 1.00</text>
-    <rect x="652" y="212" width="456" height="36" rx="4" fill="#2A1413" stroke="#6E2B25"/><text x="666" y="235" fill="#D2A8FF">row 42　Erin → price = 2.00</text>
+    <rect x="652" y="170" width="456" height="36" rx="4" fill="#2A1413" stroke="#6E2B25"/><text x="666" y="193" fill="#79C0FF">user 42　Alice → monetary=11.00</text>
+    <rect x="652" y="212" width="456" height="36" rx="4" fill="#2A1413" stroke="#6E2B25"/><text x="666" y="235" fill="#D2A8FF">user 42　Bob → monetary=22.00</text>
   </g>
   <text x="881" y="290" fill="#F0883E" font-size="24" font-weight="700" text-anchor="middle">⚡ collision</text>
   <text x="652" y="330" class="m" font-size="14" font-weight="700">same row changed by both sides →</text>
