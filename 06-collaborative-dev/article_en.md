@@ -2,23 +2,24 @@
 
 The last article was about one person rescuing one accident. This one is about something more everyday, and easy to underrate: **a team editing the same data at the same time.**
 
-But "data collaboration" raises a prior question: **which teams does it actually happen in?** The answer is a little counterintuitive — the more mature the business system, the *less* it works this way. So this article first pins down *where* it happens, then walks the moves end to end in the scenario that fits best. Every statement is verified on MatrixOne `4.0.0-rc3`.
+But where does "data collaboration" actually show up? This article first lays out the situations where it happens, then walks the moves end to end in the one that fits best to illustrate. Every statement is verified on MatrixOne `4.0.0-rc3`.
 
 > 📦 All SQL runs as one script: [matrixorigin/git4data-tutorial](https://github.com/matrixorigin/git4data-tutorial), under `06-collaborative-dev/`. Environment: `docker run -d -p 6001:6001 --name matrixone matrixorigin/matrixone:4.0.0-rc3`.
 
 ---
 
-## Which teams actually do collaborative data development?
+## Where does collaborative data development show up?
 
-A splash of cold water first: in a mature e-commerce company or big tech shop, core business tables like `products` and `orders` are **owned by services** — pricing goes through a pricing system, copy through a CMS, retirement through a product-lifecycle workflow, every change landing via API and approval. **No team actually branches an orders table and merges it back.** Those places already have a mature engineering pipeline; they don't need — and aren't suited to — data branches.
+More often than you'd think — **the moment a team directly owns and frequently hand-edits the same dataset, data collaboration is already happening**; the only choice is whether you do it the Git way or the old way (a pile of copies + coordinating in a group chat). For example:
 
-Where data branch / merge genuinely earns its keep is a different way of working: **a team directly owns, and frequently hand-edits, a dataset, with no mature application layer in between.** The textbook case:
+- **A small ML / data team raising a shared feature table / training set**: people adding features, filling labels, ingesting new data at once;
+- **A retail / e-commerce team doing a bulk repricing or a campaign push**: ops, pricing, and catalog all editing the same products table before a deadline;
+- **An analytics team co-maintaining a canonical metrics table**: each tweaks their own definitions, aligned before publish;
+- **Several people cleaning or labeling a batch of data together**: each takes a part, all merged at the end.
 
-- **A small ML / data team raising one shared feature table / training set** — the most typical of all;
-- An analytics team co-maintaining one canonical metrics table;
-- A labeling team (the subject of Part 10 in this series).
+What they share, in one line: **several people and several change sets must move forward at once, then come together safely.** So "whose change wins" becomes a daily question — and the smaller the team, the more often they edit, the more they reach straight for SQL and notebooks, the sharper it gets.
 
-The smaller and earlier the team, the more they edit data **directly** (SQL and notebooks), **often**, and **in parallel** — so "whose change wins" becomes a daily problem. This is, in fact, exactly why tools like DVC and lakeFS were born for ML data. So let's use that best-fitting scenario: **a three-person ML team iterating on one feature table together.**
+Below we take the most representative of these — **a three-person ML team iterating on one shared feature table** — and walk the moves end to end. The other scenarios use the same set: branch, self-review, merge, adjudicate conflicts.
 
 ---
 
