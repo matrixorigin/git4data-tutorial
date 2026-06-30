@@ -25,7 +25,11 @@ Below we take the most representative of these — **a three-person ML team iter
 
 ## The starting point: one shared feature table, one branch per person
 
-Three people are building a churn model on a shared feature table `ml_features` (one row per user: a few feature columns + a label, on the order of 100,000 rows). For two weeks, all three need to edit it at once:
+A bit of background first, for readers who don't live in machine learning. **Training a model usually starts not with the algorithm but with the data**: you turn raw logs, transactions, and behavior into a **feature table** — one row per sample (here, per user), each column a "feature" (a signal the model reasons over, e.g. days since last activity `recency`, average spend `monetary`), plus a `label` (the answer you want to predict, e.g. whether the user will churn). This table is the **direct input to training**, and a model is only as good as it is.
+
+And a feature table is rarely built by one person in one shot. The typical loop is iterative: **clean the data → engineer features → train and check → go back to adjust features / add data → retrain.** On a team, several people are often editing this one table **at once**: someone tuning features, someone cleaning and filling gaps, someone ingesting freshly-labeled data. Which lands right back on the core question — many people editing one table, whose change wins?
+
+Concretely: three people are building a **user-churn** model on a shared feature table `ml_features` (one row per user: feature columns like `recency` / `frequency` / `monetary` + a `label`, on the order of 100,000 rows). For two weeks, all three need to edit it at once:
 
 - **Alice does feature engineering**: recompute and calibrate a feature (say, rescale `monetary`);
 - **Bob does data cleaning**: fill missing values, fix outliers, label the unlabeled;
