@@ -1,29 +1,51 @@
-# MatrixOne Git4Data Deep Dive (Part 8) · AI Training in Practice — ML Continuous Learning: Train Only What Changed
+# MatrixOne Git4Data Deep Dive (Part 8) · AI Training in Practice — Machine Learning Continuous Learning: Incremental or Full Retrain, First See What Changed
 
-With this part the series enters **AI training.** Start with a loop every ML engineer knows:
+With this part the series enters **AI training.** Start with a loop every machine-learning engineer knows:
 
 > The data changes every day — new samples arrive, old labels get corrected. So every week (or every day) you feed the **entire** dataset back into the model and retrain from scratch. Once the data reaches the tens of millions, the loop gets ever more expensive and slow — but you don't dare skip it, because **you can't say precisely which data changed this week.**
 
-The root problem isn't training, it's the data side: **there's no precise answer to "what moved since the last run."** And that is exactly what MatrixOne's git4data capability is best at. This article does the loop in detail, and **compares, one by one, where the other approaches get stuck.** Every statement is verified on MatrixOne `4.0.0-rc3`.
+Let's be clear up front, because it's easy to oversell: **this article does not claim incremental training always beats a full retrain.** Incremental training has scenarios it fits and scenarios it doesn't (spelled out below). What *is* universal — and usually missing — is a more upstream answer: **"since the last run, what exactly moved in the data?"** With that, you can decide "train incrementally when it fits, retrain fully when it doesn't," and you can reproduce, attribute, and roll back. Turning that answer into one SQL statement is exactly what MatrixOne's git4data capability is best at. Every statement is verified on MatrixOne `4.0.0-rc3`.
 
 > 📦 All SQL runs as one script: [matrixorigin/git4data-tutorial](https://github.com/matrixorigin/git4data-tutorial), under `08-ml-incremental/`. Environment: `docker run -d -p 6001:6001 --name matrixone matrixorigin/matrixone:4.0.0-rc3`.
 
 ---
 
-## When do you do continuous learning?
+## First, cold water: when is incremental training right, and when must you retrain fully?
 
-**Any time a model's training data keeps growing and you retrain on a cadence, you're doing continuous learning** — the only question is whether you *retrain on everything each time* or *train only the delta*. Typical cases:
+"Data changed, so train only the changed part" sounds efficient — but **incremental training is a technique with clear limits, not a universal switch.** Let's settle the trade-off.
 
-- **Risk / fraud**: new transactions and freshly-labeled fraud samples arrive daily; the model updates with them;
-- **Recommendation / CTR**: impression-click data streams in, features and labels shift every day;
-- **Content moderation / classifiers**: QA keeps correcting mislabels and adding new classes;
-- **Any supervised task whose labeled set is growing**: appending new samples and correcting old labels is the norm.
+**Incremental training (online / `partial_fit` / warm-start) fits when:**
 
-When the data is small, a full retrain is fine — a few minutes. **The pain starts at "the table is tens of millions / billions of rows, and retraining is a daily job":** a full retrain takes hours and burns real compute, and 99% of the data is **identical** to last round. You want to train only that 1% of change — but you lack a reliable answer to **which rows actually changed.** The three-step loop below turns that answer into one SQL statement.
+- **the model supports incremental updates** — SGD-family linear models, Naive Bayes, continued training / fine-tuning of some neural nets;
+- **the distribution is fairly stationary** — new data extends the same distribution, so updates converge smoothly;
+- **the data is large and retraining is frequent** — full retrains are prohibitively expensive and each round's change is a tiny fraction;
+- **it's just "a batch of new samples"** — pure appends, with no large-scale corrections or deletions of old data.
+
+**But plenty of the time you genuinely need a full retrain — forcing incremental will burn you:**
+
+- **Catastrophic forgetting**: updating on new data only, a neural net tends to **forget old knowledge** and regress on the old distribution. Pure "train the delta" can make the model worse overall.
+- **Distribution shift (concept drift)**: if the distribution really changed, the right move is often to retrain on the **full set (or resample / down-weight old data)**, not just append new data.
+- **Deletes / corrections to old data**: the most overlooked one. **Deleting a row from the dataset does not delete its influence on an already-trained model** — this is the "machine unlearning" problem. When an old label is proven wrong, or samples must be deleted for compliance, usually **only a retrain** truly removes their effect; incremental can't.
+- **Non-incremental algorithms**: tree models like random forests and XGBoost mostly don't support incremental updates — you retrain by nature.
+- **Changed features / hyperparameters / architecture**: any of these demands a full retrain.
+- **Wanting a clean, reproducible, auditable model**: a path-dependent incrementally-updated model is sometimes worse than one clean full retrain.
+
+In one line: **incremental vs full is a training decision that depends on the scenario — neither is "always better."** So the real subject of this article isn't "make you go incremental"; it's the **prerequisite both choices need** — what changed.
 
 ---
 
-## The three-step loop: pin → train → DIFF the delta
+## Whichever you pick, you first have to answer "what changed?"
+
+Once you've thought the trade-off through, both paths hit the **same prerequisite**:
+
+- **Going incremental?** You must get the exact "rows added / changed this round" to feed only those to `partial_fit`;
+- **Going full retrain?** You first need "how much and what changed" to **decide whether to retrain at all** (small append → incremental is enough; big drift, lots of corrections / deletions → trigger a full retrain), and the retrain needs an **exact, reproducible** training-set version.
+
+That prerequisite — "what moved relative to the last run" — is exactly what most teams lack and struggle to get reliably. The three-step loop below turns it into one SQL statement.
+
+---
+
+## The three-step loop: pin → train → DIFF the change
 
 The training set is a `samples` table; next to it, a model registry `model_registry`.
 
@@ -55,20 +77,24 @@ DATA BRANCH DIFF samples AGAINST samples {SNAPSHOT='train_v1'} OUTPUT SUMMARY;
 --   DELETED  =    0
 ```
 
-Row-precise: **the change is these 3,200 rows; the other 100,000 didn't move.** Pull that delta (new + changed rows) and feed it to `partial_fit` (scikit-learn) or your incremental trainer:
+Row-precise: **the change is these 3,200 rows; the other 100,000 didn't move.** With that answer in hand, the next move is **your training decision**:
 
-```sql
--- The incremental training set = rows new or changed vs train_v1 (net, by value)
-SELECT * FROM samples cur
-WHERE NOT EXISTS (
-    SELECT 1 FROM samples {SNAPSHOT='train_v1'} base
-    WHERE base.sample_id = cur.sample_id
-      AND base.f1 = cur.f1 AND base.f2 = cur.f2 AND base.label = cur.label
-);
---   Measured: 3200 rows; a full retrain would process the whole 103000-row table.
-```
+- If the scenario fits incremental (pure append, stationary) → pull the change and feed `partial_fit`:
 
-A full retrain touches **103,000** rows; incremental touches **3,200** — 97% saved in one round. (`DATA BRANCH DIFF … OUTPUT FILE '/some-dir'` can also export that delta straight to a `.sql` for a downstream pipeline.)
+  ```sql
+  -- The incremental training set = rows new or changed vs train_v1 (net, by value)
+  SELECT * FROM samples cur
+  WHERE NOT EXISTS (
+      SELECT 1 FROM samples {SNAPSHOT='train_v1'} base
+      WHERE base.sample_id = cur.sample_id
+        AND base.f1 = cur.f1 AND base.f2 = cur.f2 AND base.label = cur.label
+  );
+  --   Measured: 3200 rows (a full retrain would process the whole 103000-row table).
+  ```
+
+- If those 200 fixes are actually a **large-scale relabel**, or the data **drifted** → don't force incremental; **retrain fully** on the new version. And DIFF's "how much / what changed" is exactly what grounds that call.
+
+Either way, DIFF puts the decision on facts, not on "feels like not much changed this week."
 
 ### Step 3: after training, pin again
 
@@ -77,52 +103,54 @@ CREATE SNAPSHOT train_v2 FOR TABLE mltrain_demo samples;
 INSERT INTO model_registry VALUES ('m2', 'train_v2', 0.9145);
 ```
 
-The registry accumulates a **model ↔ data chain**:
+The registry accumulates a **model ↔ data chain** (whose value holds **regardless** of incremental vs full):
 
 ```
 m1 ← train_v1 (100,000 rows)
 m2 ← train_v2 (103,000 rows) = train_v1 + 3000 new + 200 corrected
 ```
 
-That chain unlocks moves you normally can't make:
+It unlocks moves you normally can't make:
 
 - **Exact reproduction**: three months on, an audit asks "what trained m1?" — `SELECT … {SNAPSHOT='train_v1'}` answers, bit for bit (measured: the full 100k restored intact);
 - **Attributable debugging**: m2 worse than m1? DIFF the two snapshots — the suspect set is those 3,200 rows, not a needle in 100k;
 - **Data rollback**: the label "corrections" turn out wrong? `RESTORE TABLE … {SNAPSHOT = train_v1}` and start over.
 
-![The three-step continuous-learning loop: pin a snapshot before training, register model↔data after, DIFF the delta next round and train only the change; snapshots are milliseconds, DIFF tracks only the change volume](./images/fig_incremental-loop_en.svg)
+![The three-step continuous-learning loop: pin a snapshot before training, register model↔data after, DIFF the change next round and decide incremental vs retrain; snapshots are milliseconds, DIFF tracks only the change volume](./images/fig_incremental-loop_en.svg)
 
 ---
 
-## How much does this actually save?
+## When incremental *does* fit, how much does it save?
 
-We quantified it in the companion experiment: the same continuous-learning scenario over **6 rounds**, each round adding ~1000 rows plus a few label corrections. Result —
+**Given that incremental fits** (pure append, stationary, model supports it), we quantified it: the same scenario over **6 rounds**, each adding ~1000 rows plus a few label corrections —
 
 - **Full retrain**: each round processes the **whole current table** → **21,000** rows over 6 rounds;
 - **Train only the delta**: each round processes only that round's change → **6,004** rows over 6 rounds.
 
-The point isn't this round's 3.5×, it's the **trend**: full-retrain cost grows **quadratically** with rounds (the table keeps growing, and every round starts over), while incremental stays roughly **linear** — it only ever sees this round's change. **The longer the loop runs and the bigger the data, the more it saves.** In the experiment each round's delta stayed at "about 1000 rows" even when the whole table was already 6× that.
+The point isn't this round's 3.5×, it's the **trend**: full-retrain cost grows **quadratically** with rounds, incremental stays roughly **linear**. In the experiment each round's delta stayed at "about 1000 rows" even when the whole table was already 6× that.
 
-![Cost: full retrain processes the whole table each round, cumulative area swelling quadratically; incremental processes only the current round's change, cumulative roughly linear — 6,004 vs 21,000 rows over 6 rounds](./images/fig_cost-curve_en.svg)
+> But remember the cold water: **if a round drifts, or old data was deleted/changed so you must retrain, this "compute saving" doesn't hold** — that round you should honestly retrain in full. Snapshot + DIFF still give you reproduction, attribution, and rollback there; they just don't save the compute. Whether you save is scenario-dependent; being able to say *what changed* and to reproduce is what's universal.
+
+![Cost (when incremental fits): full retrain processes the whole table each round, cumulative swelling quadratically; incremental processes only the current round's change, roughly linear — 6,004 vs 21,000 rows over 6 rounds](./images/fig_cost-curve_en.svg)
 
 ---
 
-## How do the alternatives do it — and where do they break?
+## How do the alternatives get "what changed" — and where do they break?
 
-"Isn't finding the changed rows just a timestamp away?" It's worth laying out the common approaches — each works, and each gets stuck somewhere.
+Whether you end up incremental or full, you first need the answer "what moved relative to the last run." Here are the common approaches — each works, and each gets stuck somewhere.
 
-**Approach A: full retrain every time (the baseline).** Simplest and dearest: O(N) each round, growing without bound, ever-slower feedback. Fine when small, pure burn when big.
+**Approach A: full retrain, no change-tracking (the baseline).** Never ask "what changed," just start over at O(N) each round. Fine when small, pure burn when big — and you still have no reproduction / attribution.
 
-**Approach B: an `updated_at` watermark.** Add `updated_at`, remember "last trained up to time T," next round `WHERE updated_at > T`. Sounds enough, several traps: **misses deletes** (a DELETEd row won't show up past a watermark); **depends on end-to-end discipline** — any bulk backfill / correction that doesn't bump `updated_at` is silently missed; **a watermark is a moving pointer, not a version** — you can't "reproduce the exact set the last run used," nor diff two arbitrary past versions; and a row changed and reverted still counts.
+**Approach B: an `updated_at` watermark.** Add `updated_at`, remember "last trained up to time T," next round `WHERE updated_at > T`. Traps: **misses deletes** (a DELETEd row won't show past a watermark); **depends on end-to-end discipline** — any bulk backfill / correction that doesn't bump `updated_at` is silently missed; **a watermark is a moving pointer, not a version** — you can't reproduce the exact set the last run used, nor diff two arbitrary past versions; and a row changed and reverted still counts.
 
-**Approach C: CDC / binlog streaming (Debezium + Kafka).** Stream every row change out and consume the delta downstream. Problems: **heavy infra** (Kafka + Debezium + consumers); you get a **firehose of change events**, not "the net delta relative to a chosen training version"; to align "which version trained m1" you'd replay offsets; exactly-once is fiddly; a row changed 5× gives you 5 events. You now run a stream-processing pipeline just to know what changed.
+**Approach C: CDC / binlog streaming (Debezium + Kafka).** Stream every row change out and consume it. Problems: **heavy infra** (Kafka + Debezium + consumers); you get a **firehose of change events**, not "the net delta relative to a chosen training version"; aligning "which version trained m1" means replaying offsets; exactly-once is fiddly; a row changed 5× gives you 5 events.
 
-**Approach D: keep two full copies + `EXCEPT` / anti-join.** Keep a full copy of last-train data, `SELECT … EXCEPT …` for the difference. Problems: **a full copy per training version → N× storage**; the diff is a **full scan of both copies** (O(N) — you touch all the data again just to find the delta); it doesn't scale as versions accumulate.
+**Approach D: keep two full copies + `EXCEPT` / anti-join.** Keep a full copy of last-train data for the difference. Problems: **a full copy per training version → N× storage**; the diff is a **full scan of both copies** (O(N) — you touch all the data again just to find the delta); it doesn't scale as versions accumulate.
 
 **Approach E: data-versioning tools.**
-- **DVC**: versions **files** — any change makes a new dataset file and re-hashes it; you can diff file versions, but **not row-level** "which rows changed" — the grain is the whole file.
+- **DVC**: versions **files** — any change makes a new file and re-hashes it; you can diff file versions, but **not row-level** "which rows changed" — the grain is the whole file.
 - **lakeFS**: versions files / paths in object storage; the diff is **object / file-level**, not rows.
-- **Delta Lake (time travel + Change Data Feed)**: this one **can** give **row-level** changes between versions — the closest analog here. Differences: you must **enable CDF** (which writes extra change files), consume via Spark, lake / analytics-oriented; it gives **change events** (possibly intermediate states), not "the net diff vs a chosen snapshot"; and it isn't a live database still serving point reads.
+- **Delta Lake (time travel + Change Data Feed)**: this one **can** give **row-level** changes between versions — the closest analog. Differences: you must **enable CDF** (which writes extra change files), consume via Spark, lake / analytics-oriented; it gives **change events** (possibly intermediate states), not "the net diff vs a chosen snapshot"; and it isn't a live database still serving point reads.
 
 | Approach | Captures ins/upd/del | Row-level net delta vs a chosen version | Cost to compute delta | Extra infra / storage | Reproduce training set bit-for-bit | Diff any two versions |
 |---|---|---|---|---|---|---|
@@ -140,8 +168,9 @@ In one line: the others are either **only approximate** (watermark misses delete
 
 ## Cost and boundaries
 
-- **Snapshots are milliseconds, independent of data size** (Part 3); **DIFF tracks only the change volume**, never a full scan. So the longer the loop runs and the bigger the table, the more it saves over full retrains.
-- **DIFF reports "rows touched since the snapshot"** (by *was it changed*, not by value): for feeding incremental training that's exactly right — a touched row should be retrained. If you specifically want the **net value change** ("current value differs from the last version"), use the **value anti-join** above (it naturally excludes rows changed-and-reverted).
+- **Snapshots are milliseconds, independent of data size** (Part 3); **DIFF tracks only the change volume**, never a full scan.
+- **The database won't absorb incremental training's own hazards**: catastrophic forgetting, drift, and unlearning are **training-side** problems — git4data gives you "the exact change + a reproducible version," but **whether and how to train is your call.** Don't mistake "I can get the delta" for "I should train on only the delta."
+- **DIFF reports "rows touched since the snapshot"** (by *was it changed*, not by value): fine for feeding incremental training; if you specifically want the **net value change**, use the **value anti-join** above (it naturally excludes rows changed-and-reverted).
 - **To reproduce, don't rush to drop snapshots**: a snapshot pins historical objects and holds storage until `DROP SNAPSHOT`. Keep each shipped model's `train_vN` long-term; set a cleanup policy for discarded intermediate versions.
 - **Row-level DIFF requires a shared schema** (Part 4's boundary): to add a feature column, change the schema on mainline first, then continue.
 
@@ -149,15 +178,15 @@ In one line: the others are either **only approximate** (watermark misses delete
 
 ## Closing
 
-This whole article is a three-step loop:
+In one line: **know exactly what changed first, then decide incremental or full retrain.** The three-step loop —
 
 ```
 ①  CREATE SNAPSHOT train_vN             -- pin the data version before training
 ②  train → register (model, train_vN)   -- bind model to data version
-③  next round: DIFF now AGAINST train_vN  -- the delta = exact changed rows → partial_fit
+③  next round: DIFF now AGAINST train_vN  -- the change = exact rows → decide incremental / full
 ```
 
-It saves more than compute — it hands you three things you normally **just can't get**: a model's **reproducibility**, a regression's **attributability**, and dirty data's **rollback**.
+What it saves isn't necessarily compute (that depends on whether the scenario fits incremental), but it always hands you three things you normally **just can't get**: a model's **reproducibility**, a regression's **attributability**, and dirty data's **rollback**.
 
 Next, the LLM context: **SFT data curation** — dedup, filtering, and decontamination over hundreds of thousands of instructions, all done in place with SQL, with a DIFF "receipt" for every cut: what was removed, why, and whether it can be undone.
 

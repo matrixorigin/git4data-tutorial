@@ -1,11 +1,12 @@
 -- =============================================================================
--- Git4Data Tutorial — Part 8: ML Continuous Learning (train only the delta)
+-- Git4Data Tutorial — Part 8: Machine Learning Continuous Learning
 -- Pin the training set with a SNAPSHOT; next round, DIFF against it to get the
 -- exact changed rows and train only those. Plus a 6-round cost experiment
 -- (incremental vs full retrain).
 --
--- Companion to "Git4Data Deep Dive (Part 8) — ML Continuous Learning:
--- Train Only What Changed". Verified on MatrixOne v4.0.0-rc3.
+-- Companion to "Git4Data Deep Dive (Part 8) — Machine Learning Continuous
+-- Learning: Incremental or Full Retrain, First See What Changed".
+-- Verified on MatrixOne v4.0.0-rc3.
 --     docker run -d -p 6001:6001 --name matrixone matrixorigin/matrixone:4.0.0-rc3
 --     mysql -h 127.0.0.1 -P 6001 -u root -p111 < ml_incremental.sql
 -- =============================================================================
