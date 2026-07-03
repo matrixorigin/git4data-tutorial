@@ -126,32 +126,39 @@ Production went from 100k to 105k, and not one dirty row ever appeared in it.
 
 ---
 
-## How do the alternatives do it — and where do they break?
+## How the alternatives do it — by system, and where each differs
 
-"Isn't this just checking before you load? Why a whole process?" It's worth laying out the common approaches and where each gets stuck — you're probably using one of them.
+"Isn't this just checking before you load?" The naive baseline — **load straight into production, check afterward** — is the most common and the most painful: by the time the check finds the problem, the dirty data is already in production and read downstream ("publish, then pray"). WAP exists to avoid exactly that. But *how* you build a real WAP depends on the system you're on. Three families:
 
-**Approach A: load straight into production, check afterward (the most common).** `INSERT INTO events`, then run the checks. Fatal problem: **by the time the check finds the problem, the dirty data is already in production and already read downstream.** The dashboard computed wrong, the cache was warmed, downstream jobs ran on it, a model trained a round. Cleaning up now is Part 5's incident rescue — a rollback takes real new data with it, and surgical cleanup is slow and easy to miss. It's "publish, then pray."
+### 1) Git-style, on the lake: Iceberg branches, lakeFS (where WAP was born)
 
-**Approach B: blue/green or shadow table + rename swap.** Load into an `events_new`, validate, then `RENAME` it over `events`. A pile of problems: every run **full-copies** the whole table → double storage and slow; the rename **isn't atomic across multiple tables** (fact swapped, dimensions not yet → a torn intermediate state); **incremental / append** doesn't fit at all (you want to add today's 5000 rows but must rebuild the whole 100k-row table); and in-flight queries, cached table handles, indexes / permissions / constraints all have to be rebuilt on the new table.
+- **Apache Iceberg (branches).** Write to an audit branch (`spark.wap.branch`), run quality checks on it, and on pass `fast_forward` it to `main`. The branch is zero-copy and the fast-forward is a metadata-only, atomic operation — **essentially the same idea as git4data**, because WAP originated here. The difference is the setting: Iceberg is a **table format on object storage** that doesn't execute queries itself — you need an external engine (Spark / Trino / Flink) to read, write, and run the audit; it's **analytics-oriented**, and the "production table" is a lake dataset for readers, not a database still serving point reads / transactions. WAP needs engine support (Spark's WAP mode), a catalog, and a lake stack.
+- **lakeFS.** Git for the whole data lake — branch the repo, write on the branch, use **pre-merge hooks (`actions.yaml`)** as the audit gate, and merge to `main` only on pass; the merge is atomic across the whole repo, so it's **naturally multi-table / multi-file consistent.** The difference: lakeFS versions **files / paths in object storage**, not database tables; it sits in front of S3, and you still query the versioned paths with an external engine (Spark / Trino / DuckDB); the audit runs in webhooks / Airflow (another orchestration layer).
 
-**Approach C: a staging table + `INSERT … SELECT` into production.** Load a standalone staging table, validate, then `INSERT INTO events SELECT * FROM staging`. Problem: that final big `INSERT` **isn't itself an atomic publish** — while it runs, downstream reads a "half-loaded" production table; the data is **copied again**; if you're publishing updates / upserts rather than pure appends, the merge logic is complex and error-prone; and a mid-way failure is hard to roll back.
+Both genuinely do WAP right — git4data shares their lineage. The distinction is **where it lands**: they protect a **lake/warehouse dataset read by analytics**, and need a "format + external engine + catalog / hooks" stack; git4data brings the **same git-style WAP into a live HTAP database that is still serving reads** — the audit is ordinary SQL in the same engine, the publish is an atomic MERGE inside the database, and the readers are that database's consumers.
 
-**Approach D: wrap it in a transaction (`BEGIN; load; audit; COMMIT / ROLLBACK`).** Right idea, steep cost: a long transaction on a live table **holds locks and bloats undo**, dragging concurrent reads and writes down with it; many warehouses have weak transactions or don't allow DDL in one; a big batch blows past its limits; and the whole table is effectively occupied during the audit.
+### 2) On a warehouse / OLTP DB without branches: swap your way there
 
-**Approach E: bolt on a data-quality tool (dbt tests / Great Expectations / Soda).** These are great at *defining* checks, but the default timing is often "test *after* the data has already landed in the production table" (e.g. `dbt build` builds into the target, then runs tests) — the gate and the storage are separate things, and in that gap the dirty data may already have been read. To make it a true pre-publish gate you still need B/C's stage-then-swap underneath; so now you're maintaining another system and another layer of orchestration.
+- **Snowflake.** Zero-copy `CLONE` a staging table, load + audit, then `ALTER TABLE prod SWAP WITH staging` (two RENAMEs in one transaction — atomic, grants carried over). The zero-copy clone is branch-like. But **SWAP replaces the whole table, single-table**: to append just today's 5000 rows you clone → insert → swap the entire table each run; multi-table atomicity you assemble yourself; and Snowflake is a warehouse (AP), not an online point-read server.
+- **PostgreSQL / MySQL.** No branches. The closest approach is **partition exchange** — load the batch into a separate table, validate, then `ALTER TABLE … ATTACH PARTITION` (PG) / `EXCHANGE PARTITION` (MySQL); or a staging table + `RENAME` swap wrapped in a transaction. But partition exchange only fits **append-by-partition-key (e.g. date)** loads, takes a lock on attach, and scans to validate a CHECK constraint; RENAME swap brings the multi-table / handle / index / permission-rebuild problems; wrapping in a transaction means a long-held lock that drags a live table.
+- **BigQuery.** No branches. Staging table + `MERGE` / `CREATE OR REPLACE TABLE` / partition overwrite in a transaction, or a table snapshot + overwrite. Same shape: whole-table / whole-partition replacement, or a big MERGE with a mid-state and cost.
 
-Side by side with git4data's WAP:
+The theme: these systems all **work around not having branches**, approximating atomic publish by **swapping** a whole table or partition. The price: you can only swap in blocks (no row-level incremental upsert), multi-table is hard to make atomic, and the swap either locks the table or rebuilds a pile of attached objects.
 
-| Approach | Dirty data touches prod? | Atomic publish? | Extra storage | Reject / rollback | Incremental append | Complexity |
+### 3) Data-quality tools: dbt tests / Great Expectations / Soda
+
+These are the **check-definition layer, not a storage gate.** They're great at expressing checks, but the default timing is often "test *after* the data has landed in the target" (`dbt build` builds into the target, then tests) — the gate and the storage are separate, and in that gap dirty data may already have been read. To become a true gate they still need family 1 or 2 underneath. They aren't competitors to git4data but **complements**: define the checks with them, and make the gate that actually blocks with git4data's branch + atomic MERGE.
+
+| Approach | Isolation | Publish | Incremental append | Multi-table atomic | Needs external engine | Serves online reads |
 |---|---|---|---|---|---|---|
-| A load then check | **Yes** (in first) | — | none | incident rescue | yes | low |
-| B blue/green rename | no | single-table only, not multi | **2× (full copy)** | swap back | **N/A** | med-high |
-| C staging + INSERT | exposed during publish | **no** (INSERT has a mid-state) | 2× | hard | yes | medium |
-| D wrap in a txn | no | yes, but **locks / bloat** | none | ROLLBACK | yes | med (hurts live table) |
-| E DQ tool bolted on | **often** (tests post-load) | depends on substrate | depends | depends | yes | high (extra system) |
-| **git4data WAP** | **no** (prod never touched) | **yes, second-scale atomic** | **~zero (zero-copy branch)** | **just drop the branch** | **native** | **low (just SQL)** |
+| Iceberg branches | zero-copy branch | fast-forward (metadata, atomic) | yes | weak (per-table) | yes (Spark/Trino) | no (lake, AP) |
+| lakeFS | repo branch | merge (atomic, + hook gate) | yes | **strong (repo-level)** | yes | no (file layer) |
+| Snowflake | zero-copy clone | SWAP (whole-table, atomic) | **whole-table** | weak | no (built-in) | no (warehouse, AP) |
+| PG / MySQL | staging table / partition | ATTACH / EXCHANGE / RENAME | by partition | weak | no | yes (but locks / rebuilds) |
+| dbt / GE / Soda | — (defines checks only) | depends on substrate | — | — | depends | — |
+| **git4data (MatrixOne)** | **zero-copy branch** | **atomic MERGE (row-level delta)** | **native** | **db-snapshot backstop** | **no (SQL, same engine)** | **yes (HTAP, serves directly)** |
 
-In one line: git4data gets all three hard things right at once — **isolation** via a zero-copy branch (no storage, instant), **publish** via a second-scale atomic MERGE (no half-published window, regardless of table size), and **rejection** via a single DROP (production never touched the batch at all).
+In one line: this git-style gate used to live either **on the lake** (Iceberg / lakeFS — but that's not a database that serves reads, and needs an engine stack) or was **faked with whole-table swaps** on a warehouse / DB (Snowflake SWAP, PG partition exchange — coarse-grained, multi-table hard). git4data is the uncommon case that puts it **inside a live HTAP database, with a row-level incremental atomic MERGE as the publish** — and the audit is just SQL in that same database, no second stack to stand up.
 
 ![Two worlds: load-then-check — bad data enters production and is read downstream before you scramble to clean it; WAP — bad data stops at the gate, and production only ever serves clean data](./images/fig_where-bad-data-lands_en.svg)
 
