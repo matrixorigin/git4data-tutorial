@@ -12,7 +12,7 @@ Software engineering's standard answer to this class of problem is the **CI gate
 
 ## When do you actually need WAP?
 
-WAP isn't for every table — it treats one situation: **a table with downstream consumers that receives new data from a source you don't fully trust.** Meet those two conditions and it wants a gate. Typical cases:
+WAP isn't for every table — it treats a situation in **ETL (data pipelines)**: **a table with downstream consumers into which a pipeline periodically loads new data from a source you don't fully trust.** The cases below are **all ETL scenarios** — the same thing at heart, a pipeline loading a table other people read:
 
 - **A daily / hourly ETL batch load**: a table that reports, dashboards, and downstream jobs read continuously, loaded in bulk overnight. One bad batch and the whole company sees wrong numbers in the morning.
 - **Ingesting an external source you don't control**: a partner feed, a third-party API, scraped data, user uploads — quality varies, and fine today can be broken tomorrow when upstream renames a field.
@@ -20,7 +20,7 @@ WAP isn't for every table — it treats one situation: **a table with downstream
 - **Publishing a canonical metrics table many people depend on**: one wrong definition and a whole tree of consumers is wrong with it.
 - **Reverse ETL back into operational systems**: pushing computed results back to a production DB, to marketing / risk systems — a bad push has real consequences.
 
-What they share: **once the problem data is in the production table, the damage is already done** (consumers read it, decisions were made, the model trained). WAP's whole value is moving "catch the problem" from *after* production to *before* publish.
+What these ETL scenarios share: **once the problem data is in the production table, the damage is already done** (consumers read it, decisions were made, the model trained). WAP's whole value is moving "catch the problem" from *after* production to *before* publish — a release gate on your ETL pipeline.
 
 ---
 
