@@ -1,0 +1,42 @@
+<svg viewBox="0 0 1200 400" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system,'Segoe UI',Roboto,'PingFang SC','Microsoft YaHei',Arial,sans-serif">
+  <defs>
+    <pattern id="g" width="40" height="40" patternUnits="userSpaceOnUse"><path d="M40 0H0V40" fill="none" stroke="#161B22" stroke-width="1"/></pattern>
+    <marker id="arr" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto"><path d="M0 0L7 3L0 6Z" fill="#6E7681"/></marker>
+    <marker id="arrB" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto"><path d="M0 0L7 3L0 6Z" fill="#3FB950"/></marker>
+    <style>.mono{font-family:ui-monospace,'SF Mono',Menlo,Consolas,monospace;} .h{fill:#E6EDF3;} .m{fill:#9DA7B3;} .dim{fill:#6E7681;}</style>
+  </defs>
+  <rect width="1200" height="400" fill="#0D1117"/><rect width="1200" height="400" fill="url(#g)"/>
+  <text x="70" y="48" class="h" font-size="23" font-weight="700">持续学习循环：pin 版本 → 训练 → DIFF 出增量，只训变化</text>
+
+  <!-- box 1 -->
+  <rect x="76" y="104" width="300" height="118" rx="10" fill="#161B22" stroke="#8957E5" stroke-width="1.6"/>
+  <text x="96" y="132" fill="#A371F7" font-size="15" font-weight="700">① 训练前 pin 版本</text>
+  <text x="96" y="158" class="mono h" font-size="12.5">CREATE SNAPSHOT train_vN</text>
+  <text x="96" y="182" class="dim" font-size="12">毫秒级、近零成本</text>
+  <text x="96" y="202" class="dim" font-size="12">把训练集钉成可执行的事实</text>
+
+  <line x1="376" y1="163" x2="416" y2="163" stroke="#6E7681" stroke-width="1.8" marker-end="url(#arr)"/>
+
+  <!-- box 2 -->
+  <rect x="420" y="104" width="300" height="118" rx="10" fill="#161B22" stroke="#1F6FEB" stroke-width="1.6"/>
+  <text x="440" y="132" fill="#79C0FF" font-size="15" font-weight="700">② 训练 + 登记</text>
+  <text x="440" y="158" class="mono h" font-size="12.5">train → model_registry</text>
+  <text x="440" y="182" class="dim" font-size="12">模型 ↔ 数据版本绑定</text>
+  <text x="440" y="202" class="dim" font-size="12">m1 ← train_v1</text>
+
+  <line x1="720" y1="163" x2="760" y2="163" stroke="#6E7681" stroke-width="1.8" marker-end="url(#arr)"/>
+
+  <!-- box 3 -->
+  <rect x="764" y="104" width="300" height="118" rx="10" fill="#10231A" stroke="#3FB950" stroke-width="1.6"/>
+  <text x="784" y="132" fill="#3FB950" font-size="15" font-weight="700">③ 下一轮 DIFF 出增量</text>
+  <text x="784" y="158" class="mono h" font-size="12">DATA BRANCH DIFF … {train_vN}</text>
+  <text x="784" y="182" class="dim" font-size="12">增量 = 确切变更行</text>
+  <text x="784" y="202" class="dim" font-size="12">→ 只训这些 (partial_fit)</text>
+
+  <!-- return loop -->
+  <path d="M914 222 C 914 300, 226 300, 226 226" fill="none" stroke="#3FB950" stroke-width="1.8" stroke-dasharray="6 4" marker-end="url(#arrB)"/>
+  <rect x="500" y="286" width="200" height="28" rx="6" fill="#0D1117"/>
+  <text x="600" y="305" fill="#3FB950" font-size="13" text-anchor="middle" font-weight="700">下一轮：pin train_v(N+1)</text>
+
+  <text x="70" y="366" class="dim" font-size="13">快照毫秒级、与表大小无关（第三篇）；DIFF 只随变更量走——所以循环越久、数据越大，相对全量重训省得越多。</text>
+</svg>
