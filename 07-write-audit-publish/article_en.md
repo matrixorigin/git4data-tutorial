@@ -28,6 +28,30 @@ What these ETL scenarios share: **once the problem data is in the production tab
 
 Let's walk all three on a real table. Production `events` holds 100k rows of yesterday's clean data, read continuously downstream; a dimension `dim_users` exists that the fact's `user_id` must stay consistent with.
 
+First build the two tables and load yesterday's clean data — this is the reproducible setup:
+
+```sql
+CREATE DATABASE wap_demo;
+USE wap_demo;
+
+-- Production fact table: 100k rows of yesterday's clean data, read continuously
+-- by reports / dashboards / downstream jobs.
+CREATE TABLE events (
+    event_id BIGINT PRIMARY KEY,
+    user_id  INT,
+    amount   DECIMAL(10,2),
+    status   VARCHAR(16),
+    ts       DATE
+);
+INSERT INTO events
+SELECT result, result % 5000, round(rand()*500 + 1, 2), 'paid', '2026-06-29'
+FROM generate_series(1, 100000) g;
+
+-- Dimension the fact's user_id must exist in.
+CREATE TABLE dim_users (user_id INT PRIMARY KEY, tier VARCHAR(8));
+INSERT INTO dim_users SELECT result, 'std' FROM generate_series(0, 4999) g;
+```
+
 ### Write: new data always lands on a staging branch
 
 Today's batch **never touches production directly**. Open a staging branch off it — milliseconds, zero-copy (Part 3 explained why) — and load the batch onto that branch:
@@ -101,7 +125,16 @@ Measured: after the rejection production is still **100k rows**, and today's dir
 
 ### Publish: passes the audit, one atomic publish
 
-Swap in the fixed, clean batch — the audit is all green now (`null_user / negative / outlier / orphan` all 0, `MAX(ts)` is today). Before publishing, use DIFF for one last look at what this batch will *actually* do to production — row-level, exact:
+After you debug and fix upstream, re-run with a clean batch — again onto a staging branch:
+
+```sql
+DATA BRANCH CREATE TABLE events_stage FROM events;
+INSERT INTO events_stage
+SELECT 200000 + result, result % 5000, round(rand()*500 + 1, 2), 'paid', '2026-06-30'
+FROM generate_series(1, 5000) g;
+```
+
+This time the audit is all green (`null_user / negative / outlier / orphan` all 0, `MAX(ts)` is today). Before publishing, use DIFF for one last look at what this batch will *actually* do to production — row-level, exact:
 
 ```sql
 DATA BRANCH DIFF events_stage AGAINST events OUTPUT SUMMARY;   -- INSERTED 5000: exactly these 5000 rows
