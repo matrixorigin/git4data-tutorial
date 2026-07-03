@@ -4,15 +4,15 @@ With this part the series enters **AI training.** Start with a loop every machin
 
 > The data changes every day — new samples arrive, old labels get corrected. So every week (or every day) you feed the **entire** dataset back into the model and retrain from scratch. Once the data reaches the tens of millions, the loop gets ever more expensive and slow — but you don't dare skip it, because **you can't say precisely which data changed this week.**
 
-Let's be clear up front, because it's easy to oversell: **this article does not claim incremental training always beats a full retrain.** Incremental training has scenarios it fits and scenarios it doesn't (spelled out below). What *is* universal — and usually missing — is a more upstream answer: **"since the last run, what exactly moved in the data?"** With that, you can decide "train incrementally when it fits, retrain fully when it doesn't," and you can reproduce, attribute, and roll back. Turning that answer into one SQL statement is exactly what MatrixOne's git4data capability is best at. Every statement is verified on MatrixOne `4.0.0-rc3`.
+Once a machine-learning model is live, its training data keeps changing — new samples arrive, old labels get corrected — so you keep updating the model. There are two ways to update: **incremental training** (continue training on just the changed data) and a **full retrain** (train from scratch on the whole set). Which one fits depends on the scenario (both covered below). But whichever you pick, you can't avoid the same prerequisite — **"since the last run, what exactly moved in the data?"** Turning that answer into one SQL statement is exactly what MatrixOne's git4data capability is best at. This article does the loop in detail and compares where the other approaches get stuck. Every statement is verified on MatrixOne `4.0.0-rc3`.
 
 > 📦 All SQL runs as one script: [matrixorigin/git4data-tutorial](https://github.com/matrixorigin/git4data-tutorial), under `08-ml-incremental/`. Environment: `docker run -d -p 6001:6001 --name matrixone matrixorigin/matrixone:4.0.0-rc3`.
 
 ---
 
-## First, cold water: when is incremental training right, and when must you retrain fully?
+## Incremental or full retrain? What each is suited for
 
-"Data changed, so train only the changed part" sounds efficient — but **incremental training is a technique with clear limits, not a universal switch.** Let's settle the trade-off.
+Incremental and full retrain aren't "which is more advanced" — each has its scenarios. Here's the trade-off, both sides.
 
 **Incremental training (online / `partial_fit` / warm-start) fits when:**
 
@@ -21,7 +21,7 @@ Let's be clear up front, because it's easy to oversell: **this article does not 
 - **the data is large and retraining is frequent** — full retrains are prohibitively expensive and each round's change is a tiny fraction;
 - **it's just "a batch of new samples"** — pure appends, with no large-scale corrections or deletions of old data.
 
-**But plenty of the time you genuinely need a full retrain — forcing incremental will burn you:**
+**And these scenarios are better suited to — or require — a full retrain:**
 
 - **Catastrophic forgetting**: updating on new data only, a neural net tends to **forget old knowledge** and regress on the old distribution. Pure "train the delta" can make the model worse overall.
 - **Distribution shift (concept drift)**: if the distribution really changed, the right move is often to retrain on the **full set (or resample / down-weight old data)**, not just append new data.
@@ -30,7 +30,7 @@ Let's be clear up front, because it's easy to oversell: **this article does not 
 - **Changed features / hyperparameters / architecture**: any of these demands a full retrain.
 - **Wanting a clean, reproducible, auditable model**: a path-dependent incrementally-updated model is sometimes worse than one clean full retrain.
 
-In one line: **incremental vs full is a training decision that depends on the scenario — neither is "always better."** So the real subject of this article isn't "make you go incremental"; it's the **prerequisite both choices need** — what changed.
+In one line: **incremental vs full is a training decision that depends on the scenario.** The subject of this article is the **prerequisite both choices need** — what changed — and the value we build on top of it.
 
 ---
 
@@ -129,7 +129,7 @@ It unlocks moves you normally can't make:
 
 The point isn't this round's 3.5×, it's the **trend**: full-retrain cost grows **quadratically** with rounds, incremental stays roughly **linear**. In the experiment each round's delta stayed at "about 1000 rows" even when the whole table was already 6× that.
 
-> But remember the cold water: **if a round drifts, or old data was deleted/changed so you must retrain, this "compute saving" doesn't hold** — that round you should honestly retrain in full. Snapshot + DIFF still give you reproduction, attribution, and rollback there; they just don't save the compute. Whether you save is scenario-dependent; being able to say *what changed* and to reproduce is what's universal.
+> This holds only when incremental fits: **if a round drifts, or old data was deleted/changed and needs a full retrain, this "compute saving" doesn't hold** — that round you retrain in full. Snapshot + DIFF still give you reproduction, attribution, and rollback there; they just don't save the compute. Whether you save is scenario-dependent; being able to say *what changed* and to reproduce is the universal value.
 
 ![Cost (when incremental fits): full retrain processes the whole table each round, cumulative swelling quadratically; incremental processes only the current round's change, roughly linear — 6,004 vs 21,000 rows over 6 rounds](./images/fig_cost-curve_en.svg)
 
@@ -169,7 +169,7 @@ In one line: the others are either **only approximate** (watermark misses delete
 ## Cost and boundaries
 
 - **Snapshots are milliseconds, independent of data size** (Part 3); **DIFF tracks only the change volume**, never a full scan.
-- **The database won't absorb incremental training's own hazards**: catastrophic forgetting, drift, and unlearning are **training-side** problems — git4data gives you "the exact change + a reproducible version," but **whether and how to train is your call.** Don't mistake "I can get the delta" for "I should train on only the delta."
+- **The database doesn't make incremental training's trade-offs for you**: catastrophic forgetting, drift, and unlearning are **training-side** concerns — git4data gives you "the exact change + a reproducible version," and **whether to go incremental, and how to train, is your call per scenario.**
 - **DIFF reports "rows touched since the snapshot"** (by *was it changed*, not by value): fine for feeding incremental training; if you specifically want the **net value change**, use the **value anti-join** above (it naturally excludes rows changed-and-reverted).
 - **To reproduce, don't rush to drop snapshots**: a snapshot pins historical objects and holds storage until `DROP SNAPSHOT`. Keep each shipped model's `train_vN` long-term; set a cleanup policy for discarded intermediate versions.
 - **Row-level DIFF requires a shared schema** (Part 4's boundary): to add a feature column, change the schema on mainline first, then continue.
