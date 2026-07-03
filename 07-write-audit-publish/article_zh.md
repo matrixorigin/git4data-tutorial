@@ -4,7 +4,7 @@
 
 凌晨三点，定时 ETL 把昨天的一批新数据灌进生产表 `events`——报表、看板、下游作业、特征管道全都在读它。这批数据里混着上游常见的脏东西：空 `user_id`、负数金额、一眼假的离群值、对不上维表的用户。等白天有人发现时，晨会看板已经算错、下游作业已经跑完、模型已经拿它训了一轮。然后是更难的部分：**脏数据和好数据已经混在同一张表里**，事后把它摘干净，比当初挡在门外难十倍——那又回到了第五篇的事故救援。
 
-软件工程对这类问题的标准答案是 **CI 门禁**：代码得先过测试，才能合进主干。数据世界的对应物，叫 **Write-Audit-Publish（WAP）**——新数据先写进隔离区、通过审计、再发布。过去要搭这套，得靠 Iceberg / lakeFS 这类"湖上"工具；在 git4data 里，它就是分支的一个基本用法。这一篇我们把它写细：**什么时候需要它、三步怎么落地、以及别的方案为什么不好使**。SQL 全部在 MatrixOne `4.0.0-rc3` 上实测过。
+软件工程对这类问题的标准答案是 **CI 门禁**：代码得先过测试，才能合进主干。数据世界的对应物，叫 **Write-Audit-Publish（WAP）**——新数据先写进隔离区、通过审计、再发布。过去要搭这套，得靠 Iceberg / lakeFS 这类"湖上"工具；在 **MatrixOne** 里，靠内建的 git4data 能力，它就是分支的一个基本用法。这一篇我们把它写细：**什么时候需要它、三步怎么落地、以及别的方案为什么不好使**。SQL 全部在 MatrixOne `4.0.0-rc3` 上实测过。
 
 > 📦 本文 SQL 整体可跑：[matrixorigin/git4data-tutorial](https://github.com/matrixorigin/git4data-tutorial) 的 `07-write-audit-publish/`。环境：`docker run -d -p 6001:6001 --name matrixone matrixorigin/matrixone:4.0.0-rc3`。
 
@@ -132,10 +132,10 @@ SELECT COUNT(*) FROM events WHERE user_id IS NULL OR amount < 0 OR amount > 1000
 
 ### 一、湖上的 git 式方案：Iceberg 分支、lakeFS（WAP 的发源地，真能做）
 
-- **Apache Iceberg（分支）**：写进一条 audit 分支（`spark.wap.branch`）、在分支上跑质量检查、通过就 `fast_forward` 到 `main`。分支零拷贝、fast-forward 是纯元数据操作且原子——**思路和 git4data 几乎一样**，因为 WAP 本就发源于此。差异在**落点**：Iceberg 是**对象存储上的表格式**，自己不执行查询，得靠 Spark / Trino / Flink 这类外部引擎来读写、跑审计；它面向**分析（AP）**，"生产表"是湖上给分析读的数据集，**不是一个还在对外服务点查 / 事务的库**。要跑 WAP，得配 engine（Spark 的 WAP 模式）、catalog 和一整套 lake 栈。
+- **Apache Iceberg（分支）**：写进一条 audit 分支（`spark.wap.branch`）、在分支上跑质量检查、通过就 `fast_forward` 到 `main`。分支零拷贝、fast-forward 是纯元数据操作且原子——**思路和 MatrixOne 的做法几乎一样**，因为 WAP 本就发源于此。差异在**落点**：Iceberg 是**对象存储上的表格式**，自己不执行查询，得靠 Spark / Trino / Flink 这类外部引擎来读写、跑审计；它面向**分析（AP）**，"生产表"是湖上给分析读的数据集，**不是一个还在对外服务点查 / 事务的库**。要跑 WAP，得配 engine（Spark 的 WAP 模式）、catalog 和一整套 lake 栈。
 - **lakeFS**：给整个数据湖做 git——branch 整个 repo、写到分支、用 **pre-merge hooks（`actions.yaml`）** 当审计门禁、通过才 merge 到 `main`。merge 是 repo 级原子，**天然多表 / 多文件一致**。差异：lakeFS 版本化的是**对象存储里的文件 / 路径**，不是数据库表；它挡在 S3 前面，你仍要用外部引擎（Spark / Trino / DuckDB）在版本化路径上查数；审计逻辑跑在 webhook / Airflow 里（另一套编排）。
 
-这两者**确实把 WAP 做对了**，git4data 和它们同源。区别在**落点**：它们保护的是**湖 / 数仓里给分析读的数据集**，需要"存储格式 + 外部引擎 + catalog / hooks"一整套栈；git4data 把**同一套 git 式 WAP 直接做进一个还在对外服务的 HTAP 数据库**——审计是同引擎里的普通 SQL，发布是库内的原子 MERGE，读的人就是这个库的消费者。
+这两者**确实把 WAP 做对了**，**MatrixOne 和它们走的是同一条路**（git4data 不是独立产品，而是 MatrixOne 内建的这套 git 式能力）。区别在**落点**：它们保护的是**湖 / 数仓里给分析读的数据集**，需要"存储格式 + 外部引擎 + catalog / hooks"一整套栈；而 MatrixOne 把**同一套 git 式 WAP 直接做进它自己这个还在对外服务的 HTAP 数据库**——审计是同库里的普通 SQL，发布是库内的原子 MERGE，读的人就是这个库的消费者。
 
 ### 二、传统数仓 / 数据库上"凑"WAP（没有 git 分支，只能靠交换）
 
@@ -147,7 +147,7 @@ SELECT COUNT(*) FROM events WHERE user_id IS NULL OR amount < 0 OR amount > 1000
 
 ### 三、数据质量工具：dbt tests / Great Expectations / Soda
 
-它们是**审计的定义层，不是存储的门禁层**。写检查很在行，但**执行时机**常常是"数据已经落进目标表之后再测"（`dbt build` 先 build 进目标、再 test）——门禁和存储是两回事，中间那道缝里脏数据可能已被读走。要做成真门禁，底层仍要靠第一 / 二类的 branch 或 swap。它们和 git4data 不是竞争，而是**互补**：用它们定义 checks，用 git4data 的分支 + 原子 MERGE 做那道真正拦得住的门。
+它们是**审计的定义层，不是存储的门禁层**。写检查很在行，但**执行时机**常常是"数据已经落进目标表之后再测"（`dbt build` 先 build 进目标、再 test）——门禁和存储是两回事，中间那道缝里脏数据可能已被读走。要做成真门禁，底层仍要靠第一 / 二类的 branch 或 swap。它们和 MatrixOne 不是竞争，而是**互补**：用它们定义 checks，用 MatrixOne 的分支 + 原子 MERGE（即 git4data 能力）做那道真正拦得住的门。
 
 | 方案 | 隔离机制 | 发布机制 | 增量追加 | 多表原子 | 需外部引擎 | 能服务在线读 |
 |---|---|---|---|---|---|---|
@@ -156,9 +156,9 @@ SELECT COUNT(*) FROM events WHERE user_id IS NULL OR amount < 0 OR amount > 1000
 | Snowflake | 零拷贝 clone | SWAP（整表交换，原子） | **整表换** | 弱 | 否（自带） | 否（数仓 AP） |
 | PG / MySQL | staging 表 / 分区 | ATTACH / EXCHANGE / RENAME | 按分区 | 弱 | 否 | 是（但要锁 / 重建） |
 | dbt / GE / Soda | —（只定义检查） | 依赖底层 | — | — | 取决于底层 | — |
-| **git4data（MatrixOne）** | **零拷贝分支** | **原子 MERGE（行级增量）** | **原生** | **库级快照兜底** | **否（同引擎 SQL）** | **是（HTAP，直接服务）** |
+| **MatrixOne（git4data 能力）** | **零拷贝分支** | **原子 MERGE（行级增量）** | **原生** | **库级快照兜底** | **否（同引擎 SQL）** | **是（HTAP，直接服务）** |
 
-一句话总结：WAP 这套 git 式门禁，过去要么在**湖上**做（Iceberg / lakeFS——但那不是能对外服务的库，还得配一套引擎栈），要么在**数仓 / 库**上用"整表交换"硬凑（Snowflake SWAP、PG 分区交换——粒度粗、多表难原子）。git4data 是少见的把它做进**一个还在对外服务的 HTAP 数据库、且发布是行级增量原子 MERGE** 的方案——审计就是同一个库里的 SQL，不用再搭一套。
+一句话总结：WAP 这套 git 式门禁，过去要么在**湖上**做（Iceberg / lakeFS——但那不是能对外服务的库，还得配一套引擎栈），要么在**数仓 / 库**上用"整表交换"硬凑（Snowflake SWAP、PG 分区交换——粒度粗、多表难原子）。MatrixOne 是少见的把它做进**一个还在对外服务的 HTAP 数据库、且发布是行级增量原子 MERGE** 的方案（git4data 就是它内建的这套能力）——审计就是同一个库里的 SQL，不用再搭一套。
 
 ![两种世界：直接灌、事后查——脏数据先进生产、被下游读到，再手忙脚乱清理；WAP——脏数据卡在门口，生产永远只读到干净数据](./images/fig_where-bad-data-lands_zh.svg)
 
