@@ -1,4 +1,4 @@
-# MatrixOne Git4Data 技术详解（七）·数据运维实践篇：Write-Audit-Publish——给数据流水线装一道发布门禁
+# MatrixOne Git4Data 技术详解（七）·数据运维实践篇：Write-Audit-Publish——给 ETL 流水线装一道发布门禁
 
 数据流水线有一个老大难问题：**上游来的数据，质量不归你管，但出了事算你的。**
 

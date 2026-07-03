@@ -1,4 +1,4 @@
-# MatrixOne Git4Data Deep Dive (Part 7) · Data Operations in Practice — Write-Audit-Publish: A Release Gate for Your Data Pipeline
+# MatrixOne Git4Data Deep Dive (Part 7) · Data Operations in Practice — Write-Audit-Publish: A Release Gate for Your ETL Pipeline
 
 Data pipelines have a perennial problem: **you don't control upstream data quality, but you own the fallout.**
 
