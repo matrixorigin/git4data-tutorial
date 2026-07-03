@@ -1,0 +1,54 @@
+<svg viewBox="0 0 1200 430" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif">
+  <defs>
+    <pattern id="g" width="40" height="40" patternUnits="userSpaceOnUse"><path d="M40 0H0V40" fill="none" stroke="#161B22" stroke-width="1"/></pattern>
+    <marker id="arr" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto"><path d="M0 0L7 3L0 6Z" fill="#6E7681"/></marker>
+    <marker id="arrG" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto"><path d="M0 0L7 3L0 6Z" fill="#3FB950"/></marker>
+    <marker id="arrO" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto"><path d="M0 0L7 3L0 6Z" fill="#F0883E"/></marker>
+    <style>.mono{font-family:ui-monospace,'SF Mono',Menlo,Consolas,monospace;} .h{fill:#E6EDF3;} .m{fill:#9DA7B3;} .dim{fill:#6E7681;}</style>
+  </defs>
+  <rect width="1200" height="430" fill="#0D1117"/><rect width="1200" height="430" fill="url(#g)"/>
+  <text x="60" y="48" class="h" font-size="23" font-weight="700">Write-Audit-Publish: bad data is stopped at the gate; production is untouched throughout</text>
+
+  <!-- batch -->
+  <rect x="46" y="150" width="150" height="66" rx="8" fill="#161B22" stroke="#30363D" stroke-width="1.4"/>
+  <text x="121" y="178" class="h" font-size="13" text-anchor="middle" font-weight="700">today's batch</text>
+  <text x="121" y="198" class="dim" font-size="11.5" text-anchor="middle">5000 rows, maybe dirty</text>
+
+  <!-- WRITE -->
+  <line x1="200" y1="183" x2="240" y2="183" stroke="#6E7681" stroke-width="1.6" marker-end="url(#arr)"/>
+  <rect x="244" y="150" width="184" height="66" rx="8" fill="#161B22" stroke="#8957E5" stroke-width="1.5"/>
+  <text x="336" y="176" fill="#A371F7" font-size="13" text-anchor="middle" font-weight="700">Write</text>
+  <text x="336" y="196" class="m" font-size="11.5" text-anchor="middle">staging branch (zero-copy)</text>
+
+  <!-- AUDIT -->
+  <line x1="432" y1="183" x2="472" y2="183" stroke="#6E7681" stroke-width="1.6" marker-end="url(#arr)"/>
+  <rect x="476" y="150" width="184" height="66" rx="8" fill="#10233F" stroke="#1F6FEB" stroke-width="1.6"/>
+  <text x="568" y="176" fill="#79C0FF" font-size="13" text-anchor="middle" font-weight="700">Audit</text>
+  <text x="568" y="196" class="m" font-size="11.5" text-anchor="middle">SQL gate: every assertion = 0</text>
+
+  <!-- fork: pass (up) -->
+  <path d="M660 168 C 690 168, 690 110, 720 110" fill="none" stroke="#3FB950" stroke-width="1.8" marker-end="url(#arrG)"/>
+  <text x="686" y="98" fill="#3FB950" font-size="12" font-weight="700">all green ✓</text>
+  <rect x="724" y="82" width="180" height="56" rx="8" fill="#10231A" stroke="#3FB950" stroke-width="1.6"/>
+  <text x="814" y="105" fill="#3FB950" font-size="13" text-anchor="middle" font-weight="700">Publish</text>
+  <text x="814" y="124" class="m" font-size="11.5" text-anchor="middle">one atomic MERGE</text>
+
+  <!-- fork: fail (down) -->
+  <path d="M660 198 C 690 198, 690 268, 720 268" fill="none" stroke="#F0883E" stroke-width="1.8" marker-end="url(#arrO)"/>
+  <text x="686" y="290" fill="#F0883E" font-size="12" font-weight="700">any red ✗</text>
+  <rect x="724" y="240" width="230" height="60" rx="8" fill="#2A1413" stroke="#6E2B25" stroke-width="1.6"/>
+  <text x="839" y="264" fill="#F0883E" font-size="13" text-anchor="middle" font-weight="700">drop branch + alert</text>
+  <text x="839" y="283" class="dim" font-size="11.5" text-anchor="middle">DROP TABLE — prod never touched it</text>
+
+  <!-- prod -->
+  <line x1="904" y1="110" x2="944" y2="110" stroke="#3FB950" stroke-width="1.8" marker-end="url(#arrG)"/>
+  <rect x="948" y="82" width="200" height="120" rx="10" fill="#0F1B2D" stroke="#1F6FEB" stroke-width="1.8"/>
+  <text x="1048" y="112" class="h" font-size="14" text-anchor="middle" font-weight="700">prod table events</text>
+  <text x="1048" y="136" fill="#79C0FF" font-size="11.5" text-anchor="middle">consumers keep reading</text>
+  <text x="1048" y="158" class="dim" font-size="11.5" text-anchor="middle">only audited data</text>
+  <text x="1048" y="174" class="dim" font-size="11.5" text-anchor="middle">gets in</text>
+  <text x="1048" y="194" fill="#3FB950" font-size="11.5" text-anchor="middle">always clean ✓</text>
+
+  <!-- bottom note -->
+  <text x="60" y="392" class="dim" font-size="13">During Write and Audit, production hasn't moved a row; only at Publish, and only when the audit is all green, does new data enter atomically.</text>
+</svg>
