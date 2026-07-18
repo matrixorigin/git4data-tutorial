@@ -4,7 +4,9 @@ The first seven parts did two things.
 
 The first four built Git4Data's coordinate system: [why data at scale needs Git-style version control](https://github.com/matrixorigin/matrixorigin-blog/blob/main/matrixorigin/git4data-part1-data-at-scale/index.md), how MatrixOne's [snapshot / branch / diff / merge / cherry-pick / restore work](https://github.com/matrixorigin/matrixorigin-blog/blob/main/matrixorigin/git4data-part2-hands-on/index.md) and [why they're fast](https://github.com/matrixorigin/matrixorigin-blog/blob/main/matrixorigin/git4data-part3-under-the-hood/index.md), and [where it sits](https://github.com/matrixorigin/matrixorigin-blog/blob/main/matrixorigin/git4data-part4-landscape/index.md) versus DVC, lakeFS, Dolt, and Snowflake. Parts five through seven entered data operations: [rescuing a fat-finger accident](https://github.com/matrixorigin/matrixorigin-blog/blob/main/matrixorigin/git4data-part5-incident-rescue/index.md), [many people editing data in parallel](https://github.com/matrixorigin/matrixorigin-blog/blob/main/matrixorigin/git4data-part6-collaborative-dev/index.md), and how ETL uses [Write-Audit-Publish](https://github.com/matrixorigin/matrixorigin-blog/blob/main/matrixorigin/git4data-part7-write-audit-publish/index.md) to keep a bad batch out of production.
 
-From this part on, we enter **AI training.**
+From this part on, we enter **AI training.** This part is the **opening overview** of the AI-training arc: rather than drilling straight into one specific stage, it first lays out the whole map — from data arriving to model iteration, what the real data problem is at each stage, and which Git4Data capability fits it.
+
+First, a common misconception to clear up: **"data versioning" is often treated as one prep step before training** — tidy the data, save a version, then train. But a model — from ingestion, cleaning, labeling, and build, to training, evaluation, deployment, and continuous iteration — is **one data chain running end to end**; version control is the foundation every step of that chain stands on, not a one-off at any single step.
 
 What's truly hard to manage is often not any single training run, but this chain of questions:
 
@@ -19,7 +21,7 @@ What's truly hard to manage is often not any single training run, but this chain
 
 Behind all of these is the same gap: **machine learning already has code versions, model versions, and experiment tracking, but it often lacks a version semantic that acts on the data itself.**
 
-That is exactly where Git4Data fits into the ML pipeline.
+That is exactly where Git4Data fits into the ML pipeline. This part builds that whole-pipeline map first; later parts go deep along a few of its most typical stops.
 
 > 📦 Companion SQL and experiment code for this series live in [matrixorigin/git4data-tutorial](https://github.com/matrixorigin/git4data-tutorial). This article builds the whole-pipeline framework first; later parts go deep on SFT curation, collaborative labeling, RLHF preference data, and multimodal data. SQL here is verified on MatrixOne `4.1.0`.
 
