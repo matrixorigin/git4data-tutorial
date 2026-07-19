@@ -4,7 +4,9 @@
 
 前四篇建立了 Git4Data 的技术坐标：[为什么海量数据需要 Git 式版本控制](https://github.com/matrixorigin/matrixorigin-blog/blob/main/matrixorigin/git4data-part1-data-at-scale-zh/index.md)，MatrixOne 的 [snapshot / branch / diff / merge / cherry-pick / restore 怎么用](https://github.com/matrixorigin/matrixorigin-blog/blob/main/matrixorigin/git4data-part2-hands-on-zh/index.md)、[为什么快](https://github.com/matrixorigin/matrixorigin-blog/blob/main/matrixorigin/git4data-part3-under-the-hood-zh/index.md)，以及它和 DVC、lakeFS、Dolt、Snowflake 等方案[分别站在哪一层](https://github.com/matrixorigin/matrixorigin-blog/blob/main/matrixorigin/git4data-part4-landscape-zh/index.md)。第五到第七篇进入数据运维：[误操作怎么救](https://github.com/matrixorigin/matrixorigin-blog/blob/main/matrixorigin/git4data-part5-incident-rescue-zh/index.md)，[多人怎么并行改数据](https://github.com/matrixorigin/matrixorigin-blog/blob/main/matrixorigin/git4data-part6-collaborative-dev-zh/index.md)，ETL 怎么用 [Write-Audit-Publish](https://github.com/matrixorigin/matrixorigin-blog/blob/main/matrixorigin/git4data-part7-write-audit-publish-zh/index.md) 把坏批次挡在生产门外。
 
-从这一篇开始，我们进入 **AI 训练**。这一篇是整个 AI 训练篇的**开篇总览**：不急着下钻某一个具体环节，而是先把整张地图摊开——机器学习从数据进入到模型迭代，每一个环节的真实数据难题是什么、分别该用 Git4Data 的哪个能力。
+从这一篇开始，我们进入 **AI 训练**。而 AI 训练本身是一个很大的范畴：从传统机器学习，到深度学习，再到大模型的预训练与精调（SFT、RLHF 等），每一类的数据形态、规模和组织方式都不一样。**本篇只聚焦其中最基础的一类——基于结构化数据的传统机器学习**；深度学习与大模型相关的数据管理，留到系列后续再展开。
+
+作为这条线的开篇，本篇不急着下钻某一个具体环节，而是先把整张地图摊开：机器学习从数据进入到模型迭代，每一个环节的真实数据难题是什么、分别该用 Git4Data 的哪个能力。
 
 要先破除一个常见的误解：**"数据版本控制"常被当成训练前的一个准备动作**——把数据整理好、存个版本、然后开训。但一个模型从数据接入、清洗、标注、构建，到训练、评估、上线，再到持续迭代，是**一条贯穿始终的数据链**；版本控制是这条链上每一步都在用的底座，而不是某一步的一次性操作。
 
