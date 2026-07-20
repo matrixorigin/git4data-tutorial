@@ -1,8 +1,8 @@
-# MatrixOne Git4Data Deep Dive (Part 8) · AI Training in Practice — From Data Arriving to Model Iteration: How Git4Data Runs Through the Whole ML Pipeline
+# MatrixOne Git4Data Deep Dive (Part 8) · AI Training in Practice — From Data Arriving to Model Iteration: How the Git4Data Capability Runs Through the Whole ML Pipeline
 
 This series is seven parts in, and they did two things. The first four built Git4Data's coordinate system: [why data at scale needs Git-style version control](https://github.com/matrixorigin/matrixorigin-blog/blob/main/matrixorigin/git4data-part1-data-at-scale/index.md), how MatrixOne's [snapshot / branch / diff / merge / cherry-pick / restore work](https://github.com/matrixorigin/matrixorigin-blog/blob/main/matrixorigin/git4data-part2-hands-on/index.md) and [why they're fast](https://github.com/matrixorigin/matrixorigin-blog/blob/main/matrixorigin/git4data-part3-under-the-hood/index.md), and [where it sits](https://github.com/matrixorigin/matrixorigin-blog/blob/main/matrixorigin/git4data-part4-landscape/index.md) versus DVC, lakeFS, Dolt, and Snowflake. Parts five through seven covered the data-operations capabilities: [rescuing a fat-finger accident](https://github.com/matrixorigin/matrixorigin-blog/blob/main/matrixorigin/git4data-part5-incident-rescue/index.md), [many people editing data in parallel](https://github.com/matrixorigin/matrixorigin-blog/blob/main/matrixorigin/git4data-part6-collaborative-dev/index.md), and how ETL uses [Write-Audit-Publish](https://github.com/matrixorigin/matrixorigin-blog/blob/main/matrixorigin/git4data-part7-write-audit-publish/index.md) to keep a bad batch out of production.
 
-From this part on, we enter the **AI training** scenario. AI training is one of the most central places Git4Data applies — data organization, management, change, and collaboration all happen constantly during training, and Git4Data's capabilities are genuinely useful here.
+From this part on, we enter the **AI training** scenario. AI training is one of the most central applications of the Git4Data capability — data organization, management, change, and collaboration all happen constantly during training, and the capability MatrixOne builds in is genuinely useful here.
 
 AI training is itself a broad territory: from classical machine learning, to deep learning, to large-model pretraining and fine-tuning (SFT, RLHF, and so on), each with its own data shapes, scale, and organization. **This part focuses first on the most foundational of them — classical machine learning on structured data**; data management for deep learning and large models is left for later in the series.
 
@@ -23,7 +23,7 @@ What's truly hard to manage is often not any single training run, but this chain
 
 Behind all of these is the same gap: **machine learning already has code versions, model versions, and experiment tracking, but it often lacks a version semantic that acts on the data itself.**
 
-That is exactly where Git4Data fits into the ML pipeline. This part builds that whole-pipeline map first; later parts go deep along a few of its most typical stops.
+That is exactly the gap MatrixOne's Git4Data capability fills in the ML pipeline. This part builds that whole-pipeline map first; later parts go deep along a few of its most typical stops.
 
 > 📦 Companion SQL and experiment code for this series live in [matrixorigin/git4data-tutorial](https://github.com/matrixorigin/git4data-tutorial). This article builds the whole-pipeline framework first; later parts go deep on SFT curation, collaborative labeling, RLHF preference data, and multimodal data. SQL here is verified on MatrixOne `4.1.0`.
 
@@ -54,9 +54,9 @@ Code changes go to Git; training runs go to Airflow, Kubeflow, or another schedu
 
 ## One master map: which Git4Data capability each key ML stage matches
 
-The conclusion first. Git4Data covers the full lifecycle of machine-learning data — from ingestion, cleaning and labeling, feature building, and dataset release, through training and evaluation, to production monitoring and feedback flowing back. Every stage has a capability that fits it, and they all share one set of snapshot / branch / diff / merge semantics, forming a single chain of evidence inside one database.
+The conclusion first. With the Git4Data capability, MatrixOne covers the full lifecycle of machine-learning data — from ingestion, cleaning and labeling, feature building, and dataset release, through training and evaluation, to production monitoring and feedback flowing back. Every stage has a capability that fits it, and they all share one set of snapshot / branch / diff / merge semantics, forming a single chain of evidence inside one database.
 
-![The ML data lifecycle × git4data: ingest → clean → label → curate → features → train → evaluate → deploy → monitor → retrain, each stop annotated with the git4data capability](./images/fig_ml-lifecycle_en.svg)
+![The ML data lifecycle × MatrixOne Git4Data: ingest → clean → label → curate → features → train → evaluate → deploy → monitor → retrain, each stop annotated with the Git4Data capability](./images/fig_ml-lifecycle_en.svg)
 
 | ML stage | The real problem | Git4Data capability | What you get |
 |---|---|---|---|
@@ -74,7 +74,7 @@ The conclusion first. Git4Data covers the full lifecycle of machine-learning dat
 
 There's an important division of labor here:
 
-> **SQL decides whether the data is valid, whether the distribution shifted, whether metrics clear the bar; Git4Data provides the isolated workspace, the stable version anchors, and the executable change sets those judgments run on.**
+> **SQL decides whether the data is valid, whether the distribution shifted, whether metrics clear the bar; the Git4Data capability provides the isolated workspace, the stable version anchors, and the executable change sets those judgments run on.**
 
 Git4Data won't define "what counts as an outlier," "how much AUC lift is enough," or "what degree counts as concept drift." It solves a different layer: letting those rules run on the correct data version, letting passing changes enter the mainline in a controlled way, and letting failed trials be discarded or rolled back.
 
@@ -130,7 +130,7 @@ The three tables carry different duties:
 
 A truly reproducible training record should look at least like this:
 
-![A reproducible training run has nine parts owned by Git, the container image, the model registry, and Git4Data, which owns the data snapshot, split manifest, and feature-value version](./images/fig_run-anatomy_en.svg)
+![A reproducible training run has nine parts owned by Git, the container image, the model registry, and MatrixOne, whose Git4Data capability owns the data snapshot, split manifest, and feature-value version](./images/fig_run-anatomy_en.svg)
 
 **A data snapshot alone isn't full reproduction.** But without a data snapshot, that equation is always missing its most important term.
 
@@ -202,7 +202,7 @@ The mapping is very natural:
 
 ![Branch graph for multi-person labeling: snapshot before review, one branch per annotator, conflicts surface on merge, and disputed rows are picked back after senior re-judgement](./images/fig_labeling-flow_en.svg)
 
-The labeling platform still handles the UI, task dispatch, permissions, and piecework; Git4Data handles the underlying data's parallel edits, conflict semantics, and version evidence.
+The labeling platform still handles the UI, task dispatch, permissions, and piecework; the underlying data's parallel edits, conflict semantics, and version evidence are handled by MatrixOne's Git4Data capability.
 
 ### Stop 3: Feature engineering — not copying a big table, but pulling a trial branch
 
@@ -510,13 +510,13 @@ They're data-recovery capabilities first. In the ML pipeline, the extra value is
 
 ---
 
-## Which layer does Git4Data actually sit at in the MLOps stack
+## Which layer does MatrixOne actually sit at in the MLOps stack
 
 A complete article must also say what it does *not* do. A more precise division of labor:
 
-![Where Git4Data sits in the MLOps stack: Git owns code, the image owns the runtime, lakeFS owns large bytes, the scheduler owns execution, and Git4Data owns structured data state](./images/fig_mlops-layers_en.svg)
+![Where MatrixOne sits in the MLOps stack: Git owns code, the image owns the runtime, lakeFS owns large bytes, the scheduler owns execution, and MatrixOne owns structured data state](./images/fig_mlops-layers_en.svg)
 
-| Object | Better-suited version / management | Git4Data's role |
+| Object | Better-suited version / management | MatrixOne's role |
 |---|---|---|
 | Training code, SQL, feature definitions | Git | record the commit in the registry, bound to a data snapshot |
 | Structured samples, labels, feature values | **MatrixOne Git4Data** | snapshot, branch, row-level diff / merge / pick, restore |
@@ -528,7 +528,7 @@ A complete article must also say what it does *not* do. A more precise division 
 
 In one line:
 
-> **Git manages code, images manage the environment, the model registry manages artifacts, the scheduler manages execution; Git4Data manages the continuously-evolving "structured data state" of the ML process, and connects it to the other versions.**
+> **Git manages code, images manage the environment, the model registry manages artifacts, the scheduler manages execution; MatrixOne, through Git4Data, manages the continuously-evolving "structured data state" of the ML process, and connects it to the other versions.**
 
 That's more realistic — and easier to adopt — than "one tool does all of MLOps."
 
@@ -536,7 +536,7 @@ That's more realistic — and easier to adopt — than "one tool does all of MLO
 
 ## Which data should go into MatrixOne, and which shouldn't
 
-Git4Data fits best the data that:
+MatrixOne fits best the data that:
 
 1. has rows, tables, and primary keys as its basic semantics;
 2. is repeatedly cleaned, corrected, labeled, merged;
@@ -622,7 +622,7 @@ Once these three take hold, snapshot, branch, DIFF, and MERGE stop being scatter
 
 ## Closing: a model's lifecycle is, at heart, the lifecycle of a data state
 
-Looking back over the whole flow, Git4Data didn't train the model for you, nor judge whether the model is good. It does a more foundational layer:
+Looking back over the whole flow, the Git4Data capability didn't train the model for you, nor judge whether the model is good. It does a more foundational layer:
 
 - before data enters, it can be isolated;
 - while it's edited, it can be parallelized, reviewed, merged;

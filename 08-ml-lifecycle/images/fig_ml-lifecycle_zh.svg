@@ -6,7 +6,7 @@
     <style>.mono{font-family:ui-monospace,'SF Mono',Menlo,Consolas,monospace;} .h{fill:#E6EDF3;} .m{fill:#9DA7B3;} .dim{fill:#6E7681;}</style>
   </defs>
   <rect width="1200" height="430" fill="#0D1117"/><rect width="1200" height="430" fill="url(#g)"/>
-  <text x="44" y="42" class="h" font-size="22" font-weight="700">机器学习数据全流程 × git4data：每一步该用哪个能力</text>
+  <text x="44" y="42" class="h" font-size="22" font-weight="700">机器学习数据全流程 × MatrixOne Git4Data：每一步该用哪个能力</text>
 
   <!-- 8 stage boxes -->
   <g>
