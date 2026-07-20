@@ -54,7 +54,7 @@ Code changes go to Git; training runs go to Airflow, Kubeflow, or another schedu
 
 ## One master map: which Git4Data capability each key ML stage matches
 
-The conclusion first. Git4Data isn't just a snapshot before training; it can cover the whole data lifecycle, from arrival to feedback.
+The conclusion first. Git4Data covers the full lifecycle of machine-learning data — from ingestion, cleaning and labeling, feature building, and dataset release, through training and evaluation, to production monitoring and feedback flowing back. Every stage has a capability that fits it, and they all share one set of snapshot / branch / diff / merge semantics, forming a single chain of evidence inside one database.
 
 ![The ML data lifecycle × git4data: ingest → clean → label → curate → features → train → evaluate → deploy → monitor → retrain, each stop annotated with the git4data capability](./images/fig_ml-lifecycle_en.svg)
 
