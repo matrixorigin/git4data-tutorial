@@ -1,12 +1,12 @@
 # MatrixOne Git4Data Deep Dive (Part 8) · AI Training in Practice — From Data Arriving to Model Iteration: How Git4Data Runs Through the Whole ML Pipeline
 
-The first seven parts did two things.
+This series is seven parts in, and they did two things. The first four built Git4Data's coordinate system: [why data at scale needs Git-style version control](https://github.com/matrixorigin/matrixorigin-blog/blob/main/matrixorigin/git4data-part1-data-at-scale/index.md), how MatrixOne's [snapshot / branch / diff / merge / cherry-pick / restore work](https://github.com/matrixorigin/matrixorigin-blog/blob/main/matrixorigin/git4data-part2-hands-on/index.md) and [why they're fast](https://github.com/matrixorigin/matrixorigin-blog/blob/main/matrixorigin/git4data-part3-under-the-hood/index.md), and [where it sits](https://github.com/matrixorigin/matrixorigin-blog/blob/main/matrixorigin/git4data-part4-landscape/index.md) versus DVC, lakeFS, Dolt, and Snowflake. Parts five through seven covered the data-operations capabilities: [rescuing a fat-finger accident](https://github.com/matrixorigin/matrixorigin-blog/blob/main/matrixorigin/git4data-part5-incident-rescue/index.md), [many people editing data in parallel](https://github.com/matrixorigin/matrixorigin-blog/blob/main/matrixorigin/git4data-part6-collaborative-dev/index.md), and how ETL uses [Write-Audit-Publish](https://github.com/matrixorigin/matrixorigin-blog/blob/main/matrixorigin/git4data-part7-write-audit-publish/index.md) to keep a bad batch out of production.
 
-The first four built Git4Data's coordinate system: [why data at scale needs Git-style version control](https://github.com/matrixorigin/matrixorigin-blog/blob/main/matrixorigin/git4data-part1-data-at-scale/index.md), how MatrixOne's [snapshot / branch / diff / merge / cherry-pick / restore work](https://github.com/matrixorigin/matrixorigin-blog/blob/main/matrixorigin/git4data-part2-hands-on/index.md) and [why they're fast](https://github.com/matrixorigin/matrixorigin-blog/blob/main/matrixorigin/git4data-part3-under-the-hood/index.md), and [where it sits](https://github.com/matrixorigin/matrixorigin-blog/blob/main/matrixorigin/git4data-part4-landscape/index.md) versus DVC, lakeFS, Dolt, and Snowflake. Parts five through seven entered data operations: [rescuing a fat-finger accident](https://github.com/matrixorigin/matrixorigin-blog/blob/main/matrixorigin/git4data-part5-incident-rescue/index.md), [many people editing data in parallel](https://github.com/matrixorigin/matrixorigin-blog/blob/main/matrixorigin/git4data-part6-collaborative-dev/index.md), and how ETL uses [Write-Audit-Publish](https://github.com/matrixorigin/matrixorigin-blog/blob/main/matrixorigin/git4data-part7-write-audit-publish/index.md) to keep a bad batch out of production.
+From this part on, we enter the **AI training** scenario. AI training is one of the most central places Git4Data applies — data organization, management, change, and collaboration all happen constantly during training, and Git4Data's capabilities are genuinely useful here.
 
-From this part on, we enter **AI training** — which is itself a broad territory: from classical machine learning, to deep learning, to large-model pretraining and fine-tuning (SFT, RLHF, and so on), each with its own data shapes, scale, and organization. **This part focuses only on the most foundational of them — classical machine learning on structured data**; the data management for deep learning and large models is left for later in the series.
+AI training is itself a broad territory: from classical machine learning, to deep learning, to large-model pretraining and fine-tuning (SFT, RLHF, and so on), each with its own data shapes, scale, and organization. **This part focuses first on the most foundational of them — classical machine learning on structured data**; data management for deep learning and large models is left for later in the series.
 
-As the opener of that thread, this part doesn't drill straight into one specific stage. It first lays out the whole map: from data arriving to model iteration, what the real data problem is at each stage, and which Git4Data capability fits it.
+Machine learning is a scenario with many stages and a long chain. Rather than drilling into one specific stage first, let's lay out the whole map: from data arriving to model iteration, what the real data problem is at each stage, and which Git4Data capability fits it.
 
 First, a common misconception to clear up: **"data versioning" is often treated as one prep step before training** — tidy the data, save a version, then train. But a model — from ingestion, cleaning, labeling, and build, to training, evaluation, deployment, and continuous iteration — is **one data chain running end to end**; version control is the foundation every step of that chain stands on, not a one-off at any single step.
 
@@ -39,13 +39,7 @@ collect data → clean & label → feature engineering → train → evaluate �
 
 A real system is more like a loop:
 
-```text
-                          ┌──────── online prediction & business feedback ────────┐
-                          │                                                        │
-ingest → quality gate → clean/label → features → dataset split & release → train/eval → deploy
-   ↑                       │              │                       │
-   └──── new events, new labels, delayed truth ─────────┴──── drift, regression, incidents ─┘
-```
+![ML is not an assembly line but a loop: ingest, clean/label, features, split and release, train/evaluate, deploy, with new data flowing back into the next round; four kinds of state change every round](./images/fig_feedback-loop_en.svg)
 
 Every time around, at least four kinds of state change:
 
@@ -136,17 +130,7 @@ The three tables carry different duties:
 
 A truly reproducible training record should look at least like this:
 
-```text
-run = data snapshot
-    + feature-definition version
-    + dataset split rule
-    + evaluation protocol & metric definition
-    + code commit
-    + runtime image digest
-    + hyperparameters & random seed
-    + model artifact URI & hash
-    + evaluation metrics
-```
+![A reproducible training run has nine parts owned by Git, the container image, the model registry, and Git4Data, which owns the data snapshot, split manifest, and feature-value version](./images/fig_run-anatomy_en.svg)
 
 **A data snapshot alone isn't full reproduction.** But without a data snapshot, that equation is always missing its most important term.
 
@@ -216,14 +200,7 @@ DATA BRANCH PICK samples_review INTO samples
 
 The mapping is very natural:
 
-```text
-annotators in parallel = branch
-state before labeling   = snapshot
-two people disagree     = merge conflict
-senior re-judgment      = cherry-pick
-what a round changed    = diff
-scrap the whole round   = restore
-```
+![Branch graph for multi-person labeling: snapshot before review, one branch per annotator, conflicts surface on merge, and disputed rows are picked back after senior re-judgement](./images/fig_labeling-flow_en.svg)
 
 The labeling platform still handles the UI, task dispatch, permissions, and piecework; Git4Data handles the underlying data's parallel edits, conflict semantics, and version evidence.
 
@@ -294,6 +271,8 @@ Now `samples` and `dataset_membership` must be released as one whole. Snapshotti
 ```sql
 CREATE SNAPSHOT risk_dataset_v1 FOR DATABASE risk_ml;
 ```
+
+![Dataset release: one database snapshot freezes samples and dataset_membership together, releasing train/valid/test consistently in one version, split by time](./images/fig_split-release_en.svg)
 
 Training, validation, and the final test all explicitly read from the same dataset version, changing only `split_name`:
 
@@ -534,6 +513,8 @@ They're data-recovery capabilities first. In the ML pipeline, the extra value is
 ## Which layer does Git4Data actually sit at in the MLOps stack
 
 A complete article must also say what it does *not* do. A more precise division of labor:
+
+![Where Git4Data sits in the MLOps stack: Git owns code, the image owns the runtime, lakeFS owns large bytes, the scheduler owns execution, and Git4Data owns structured data state](./images/fig_mlops-layers_en.svg)
 
 | Object | Better-suited version / management | Git4Data's role |
 |---|---|---|

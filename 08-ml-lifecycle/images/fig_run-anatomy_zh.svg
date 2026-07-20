@@ -1,0 +1,62 @@
+<svg viewBox="0 0 1200 410" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system,'Segoe UI',Roboto,'PingFang SC','Microsoft YaHei',Arial,sans-serif">
+  <defs>
+    <pattern id="g" width="40" height="40" patternUnits="userSpaceOnUse"><path d="M40 0H0V40" fill="none" stroke="#161B22" stroke-width="1"/></pattern>
+    <marker id="arr" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0 0L6 3L0 6Z" fill="#6E7681"/></marker>
+    <marker id="arrL" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto"><path d="M0 0L7 3L0 6Z" fill="#79C0FF"/></marker>
+    <marker id="arrP" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto"><path d="M0 0L7 3L0 6Z" fill="#A371F7"/></marker>
+    <style>.mono{font-family:ui-monospace,'SF Mono',Menlo,Consolas,monospace;} .h{fill:#E6EDF3;} .m{fill:#9DA7B3;} .dim{fill:#6E7681;}</style>
+  </defs>
+  <rect width="1200" height="410" fill="#0D1117"/><rect width="1200" height="410" fill="url(#g)"/>
+  <text x="44" y="42" class="h" font-size="22" font-weight="700">一次可复现的训练 run 由九个部分组成——各有各的归属</text>
+  <rect x="430" y="62" width="340" height="40" rx="20" fill="#161B22" stroke="#8957E5" stroke-width="1.6"/>
+  <text x="600" y="88" class="h" font-size="15" text-anchor="middle" font-weight="700">run = 一次可复现的训练</text>
+  <g stroke="#30363D" stroke-width="1.3" fill="none">
+    <path d="M600 102 L600 126"/>
+    <path d="M174 126 L1026 126"/>
+    <path d="M174 126 L174 146" marker-end="url(#arr)"/>
+    <path d="M458 126 L458 146" marker-end="url(#arr)"/>
+    <path d="M742 126 L742 146" marker-end="url(#arr)"/>
+    <path d="M1026 126 L1026 146" marker-end="url(#arr)"/>
+  </g>
+  <rect x="44" y="150" width="260" height="196" rx="10" fill="#161B22" stroke="#30363D" stroke-width="1.4"/>
+  <text x="174" y="180" fill="#E6EDF3" font-size="14" text-anchor="middle" font-weight="700">Git</text>
+  <text x="174" y="201" class="dim" font-size="10.5" text-anchor="middle">代码与定义</text>
+  <line x1="66" y1="214" x2="282" y2="214" stroke="#21262D" stroke-width="1.2"/>
+  <circle cx="72" cy="240" r="3" fill="#6E7681"/>
+  <text x="86" y="244" class="m" font-size="11.5">代码 commit</text>
+  <circle cx="72" cy="272" r="3" fill="#6E7681"/>
+  <text x="86" y="276" class="m" font-size="11.5">特征定义 / SQL</text>
+  <circle cx="72" cy="304" r="3" fill="#6E7681"/>
+  <text x="86" y="308" class="m" font-size="11.5">评估协议与指标口径</text>
+  <rect x="328" y="150" width="260" height="196" rx="10" fill="#161B22" stroke="#30363D" stroke-width="1.4"/>
+  <text x="458" y="180" fill="#E6EDF3" font-size="14" text-anchor="middle" font-weight="700">容器镜像</text>
+  <text x="458" y="201" class="dim" font-size="10.5" text-anchor="middle">运行环境</text>
+  <line x1="350" y1="214" x2="566" y2="214" stroke="#21262D" stroke-width="1.2"/>
+  <circle cx="356" cy="240" r="3" fill="#6E7681"/>
+  <text x="370" y="244" class="m" font-size="11.5">镜像 digest</text>
+  <circle cx="356" cy="272" r="3" fill="#6E7681"/>
+  <text x="370" y="276" class="m" font-size="11.5">Python / CUDA 依赖</text>
+  <circle cx="356" cy="304" r="3" fill="#6E7681"/>
+  <text x="370" y="308" class="m" font-size="11.5">系统环境 hash</text>
+  <rect x="612" y="150" width="260" height="196" rx="10" fill="#161B22" stroke="#30363D" stroke-width="1.4"/>
+  <text x="742" y="180" fill="#E6EDF3" font-size="14" text-anchor="middle" font-weight="700">模型仓库 / 实验平台</text>
+  <text x="742" y="201" class="dim" font-size="10.5" text-anchor="middle">产物与指标</text>
+  <line x1="634" y1="214" x2="850" y2="214" stroke="#21262D" stroke-width="1.2"/>
+  <circle cx="640" cy="240" r="3" fill="#6E7681"/>
+  <text x="654" y="244" class="m" font-size="11.5">模型产物 URI + hash</text>
+  <circle cx="640" cy="272" r="3" fill="#6E7681"/>
+  <text x="654" y="276" class="m" font-size="11.5">超参数与随机种子</text>
+  <circle cx="640" cy="304" r="3" fill="#6E7681"/>
+  <text x="654" y="308" class="m" font-size="11.5">valid / test 指标</text>
+  <rect x="896" y="150" width="260" height="196" rx="10" fill="#10231A" stroke="#3FB950" stroke-width="1.6"/>
+  <text x="1026" y="180" fill="#3FB950" font-size="14" text-anchor="middle" font-weight="700">Git4Data</text>
+  <text x="1026" y="201" class="dim" font-size="10.5" text-anchor="middle">结构化数据状态 · 本篇主角</text>
+  <line x1="918" y1="214" x2="1134" y2="214" stroke="#21262D" stroke-width="1.2"/>
+  <circle cx="924" cy="240" r="3" fill="#3FB950"/>
+  <text x="938" y="244" class="m" font-size="11.5">数据快照（样本与标签）</text>
+  <circle cx="924" cy="272" r="3" fill="#3FB950"/>
+  <text x="938" y="276" class="m" font-size="11.5">切分清单与切分规则</text>
+  <circle cx="924" cy="304" r="3" fill="#3FB950"/>
+  <text x="938" y="308" class="m" font-size="11.5">特征值版本</text>
+  <text x="600" y="378" class="dim" font-size="12" text-anchor="middle">只有数据快照还不等于完整复现；但没有数据快照，这个等式一定缺最关键的一项。</text>
+</svg>

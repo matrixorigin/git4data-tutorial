@@ -1,12 +1,12 @@
 # MatrixOne Git4Data 技术详解（八）·AI 训练实践篇：从数据进入到模型迭代——Git4Data 如何贯穿机器学习全流程
 
-前七篇做了两件事。
+这个系列已经写了七篇了，主要做了两件事。前四篇建立了 Git4Data 的技术坐标：[为什么海量数据需要 Git 式版本控制](https://github.com/matrixorigin/matrixorigin-blog/blob/main/matrixorigin/git4data-part1-data-at-scale-zh/index.md)，MatrixOne 的 [snapshot / branch / diff / merge / cherry-pick / restore 怎么用](https://github.com/matrixorigin/matrixorigin-blog/blob/main/matrixorigin/git4data-part2-hands-on-zh/index.md)、[为什么快](https://github.com/matrixorigin/matrixorigin-blog/blob/main/matrixorigin/git4data-part3-under-the-hood-zh/index.md)，以及它和 DVC、lakeFS、Dolt、Snowflake 等方案[分别站在哪一层](https://github.com/matrixorigin/matrixorigin-blog/blob/main/matrixorigin/git4data-part4-landscape-zh/index.md)。第五到第七篇主要介绍了数据运维相关的能力：[误操作怎么救](https://github.com/matrixorigin/matrixorigin-blog/blob/main/matrixorigin/git4data-part5-incident-rescue-zh/index.md)，[多人怎么并行改数据](https://github.com/matrixorigin/matrixorigin-blog/blob/main/matrixorigin/git4data-part6-collaborative-dev-zh/index.md)，ETL 怎么用 [Write-Audit-Publish](https://github.com/matrixorigin/matrixorigin-blog/blob/main/matrixorigin/git4data-part7-write-audit-publish-zh/index.md) 把坏批次挡在生产门外。
 
-前四篇建立了 Git4Data 的技术坐标：[为什么海量数据需要 Git 式版本控制](https://github.com/matrixorigin/matrixorigin-blog/blob/main/matrixorigin/git4data-part1-data-at-scale-zh/index.md)，MatrixOne 的 [snapshot / branch / diff / merge / cherry-pick / restore 怎么用](https://github.com/matrixorigin/matrixorigin-blog/blob/main/matrixorigin/git4data-part2-hands-on-zh/index.md)、[为什么快](https://github.com/matrixorigin/matrixorigin-blog/blob/main/matrixorigin/git4data-part3-under-the-hood-zh/index.md)，以及它和 DVC、lakeFS、Dolt、Snowflake 等方案[分别站在哪一层](https://github.com/matrixorigin/matrixorigin-blog/blob/main/matrixorigin/git4data-part4-landscape-zh/index.md)。第五到第七篇进入数据运维：[误操作怎么救](https://github.com/matrixorigin/matrixorigin-blog/blob/main/matrixorigin/git4data-part5-incident-rescue-zh/index.md)，[多人怎么并行改数据](https://github.com/matrixorigin/matrixorigin-blog/blob/main/matrixorigin/git4data-part6-collaborative-dev-zh/index.md)，ETL 怎么用 [Write-Audit-Publish](https://github.com/matrixorigin/matrixorigin-blog/blob/main/matrixorigin/git4data-part7-write-audit-publish-zh/index.md) 把坏批次挡在生产门外。
+从这一篇开始，我们进入 **AI 训练的场景**。AI 训练是 Git4Data 应用的一个非常核心的场景——训练过程中的数据组织、管理、变更和协作都非常频繁，Git4Data 的能力在这里非常实用。
 
-从这一篇开始，我们进入 **AI 训练**。而 AI 训练本身是一个很大的范畴：从传统机器学习，到深度学习，再到大模型的预训练与精调（SFT、RLHF 等），每一类的数据形态、规模和组织方式都不一样。**本篇只聚焦其中最基础的一类——基于结构化数据的传统机器学习**；深度学习与大模型相关的数据管理，留到系列后续再展开。
+AI 训练本身是一个很大的范畴：从传统机器学习，到深度学习，再到大模型的预训练与精调（SFT、RLHF 等），每一类的数据形态、规模和组织方式都不一样。**本篇先聚焦其中最基础的一类——基于结构化数据的传统机器学习**；深度学习与大模型相关的数据管理，留到系列后续再展开。
 
-作为这条线的开篇，本篇不急着下钻某一个具体环节，而是先把整张地图摊开：机器学习从数据进入到模型迭代，每一个环节的真实数据难题是什么、分别该用 Git4Data 的哪个能力。
+机器学习是一个环节很多、链条很长的场景。我们先不下钻某一个具体环节，而是先把整张地图摊开：机器学习从数据进入到模型迭代，每一个环节的真实数据难题是什么、分别该用 Git4Data 的哪个能力。
 
 要先破除一个常见的误解：**"数据版本控制"常被当成训练前的一个准备动作**——把数据整理好、存个版本、然后开训。但一个模型从数据接入、清洗、标注、构建，到训练、评估、上线，再到持续迭代，是**一条贯穿始终的数据链**；版本控制是这条链上每一步都在用的底座，而不是某一步的一次性操作。
 
@@ -39,13 +39,7 @@
 
 真实系统却更像一个环：
 
-```text
-                          ┌──────── 线上预测与业务反馈 ────────┐
-                          │                                  │
-数据接入 → 质量门禁 → 清洗/标注 → 特征 → 数据集切分与发布 → 训练/评估 → 部署
-   ↑                      │             │                    │
-   └──── 新事件、新标签、延迟真值 ───────┴──── 漂移、掉点、事故 ─┘
-```
+![机器学习不是一条流水线，而是一个不断绕圈的反馈环：接入→清洗标注→特征→切分发布→训练评估→上线，新数据回流进入下一轮，每圈至少有样本、标签、特征、训练决策四类状态在变](./images/fig_feedback-loop_zh.svg)
 
 每绕一圈，至少有四类状态在变化：
 
@@ -138,17 +132,7 @@ CREATE TABLE model_registry (
 
 一份真正可复现的训练记录至少应该长这样：
 
-```text
-run = 数据快照
-    + 特征定义版本
-    + 数据切分规则
-    + 评估协议与指标口径
-    + 代码 commit
-    + 运行镜像 digest
-    + 超参数与随机种子
-    + 模型产物 URI 与 hash
-    + 评估指标
-```
+![一次可复现的训练 run 由九个部分组成，分别归属 Git、容器镜像、模型仓库与 Git4Data，其中数据快照、切分清单与特征值版本由 Git4Data 负责](./images/fig_run-anatomy_zh.svg)
 
 **只有数据快照还不等于完整复现。** 但没有数据快照，这个等式一定缺最关键的一项。
 
@@ -218,14 +202,7 @@ DATA BRANCH PICK samples_review INTO samples
 
 这套映射非常自然：
 
-```text
-标注员并行       = branch
-标注前的原始状态 = snapshot
-两人意见不同     = merge conflict
-资深评审改判     = cherry-pick
-整轮标注改了什么 = diff
-整轮作废重来     = restore
-```
+![多人标注的分支图：标注前打快照，两位标注员各开一条分支，冲突在合并时自动暴露，资深评审改判后用 PICK 把争议行挑回主线](./images/fig_labeling-flow_zh.svg)
 
 标注平台仍然负责界面、任务分发、权限和计件；Git4Data 负责的是底层数据的并行修改、冲突语义和版本证据。
 
@@ -296,6 +273,8 @@ WHERE label IS NOT NULL AND event_time < '2026-07-01';
 ```sql
 CREATE SNAPSHOT risk_dataset_v1 FOR DATABASE risk_ml;
 ```
+
+![数据集发布：一次库级快照同时冻结 samples 与 dataset_membership，train/valid/test 三个集合在同一版本里一致发布，并按时间切分](./images/fig_split-release_zh.svg)
 
 训练、验证和最终测试都显式从同一个数据集版本读取，只改变 `split_name`：
 
@@ -537,6 +516,8 @@ DIFF 可以回答：
 ## Git4Data 在 MLOps 技术栈里到底站哪一层
 
 一篇完整的文章也必须讲清它不负责什么。更准确的分工如下：
+
+![Git4Data 在 MLOps 栈里的位置：Git 管代码、镜像管环境、lakeFS 管大字节、调度器管执行，Git4Data 管结构化数据状态](./images/fig_mlops-layers_zh.svg)
 
 | 对象 | 更适合的版本 / 管理方式 | Git4Data 的角色 |
 |---|---|---|

@@ -1,0 +1,53 @@
+<svg viewBox="0 0 1200 430" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif">
+  <defs>
+    <pattern id="g" width="40" height="40" patternUnits="userSpaceOnUse"><path d="M40 0H0V40" fill="none" stroke="#161B22" stroke-width="1"/></pattern>
+    <marker id="arr" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0 0L6 3L0 6Z" fill="#6E7681"/></marker>
+    <marker id="arrL" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto"><path d="M0 0L7 3L0 6Z" fill="#79C0FF"/></marker>
+    <marker id="arrP" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto"><path d="M0 0L7 3L0 6Z" fill="#A371F7"/></marker>
+    <style>.mono{font-family:ui-monospace,'SF Mono',Menlo,Consolas,monospace;} .h{fill:#E6EDF3;} .m{fill:#9DA7B3;} .dim{fill:#6E7681;}</style>
+  </defs>
+  <rect width="1200" height="430" fill="#0D1117"/><rect width="1200" height="430" fill="url(#g)"/>
+  <text x="44" y="42" class="h" font-size="22" font-weight="700">Dataset release: one database snapshot freezes both content and “who belongs to which set”</text>
+  <rect x="44" y="92" width="236" height="76" rx="9" fill="#161B22" stroke="#30363D" stroke-width="1.4"/>
+  <text x="162" y="124" class="h mono" font-size="13" text-anchor="middle" font-weight="700">samples</text>
+  <text x="162" y="148" class="dim" font-size="11" text-anchor="middle">content · labels · feature values</text>
+  <line x1="284" y1="130" x2="322" y2="130" stroke="#6E7681" stroke-width="1.5" marker-end="url(#arr)"/>
+  <rect x="44" y="186" width="236" height="76" rx="9" fill="#161B22" stroke="#30363D" stroke-width="1.4"/>
+  <text x="162" y="218" class="h mono" font-size="13" text-anchor="middle" font-weight="700">dataset_membership</text>
+  <text x="162" y="242" class="dim" font-size="11" text-anchor="middle">who is in which set · split rule</text>
+  <line x1="284" y1="224" x2="322" y2="224" stroke="#6E7681" stroke-width="1.5" marker-end="url(#arr)"/>
+  <rect x="330" y="92" width="200" height="170" rx="10" fill="#191233" stroke="#8957E5" stroke-width="1.6"/>
+  <text x="430" y="130" fill="#A371F7" font-size="11.5" text-anchor="middle" class="mono">CREATE SNAPSHOT</text>
+  <text x="430" y="153" class="h mono" font-size="13" text-anchor="middle" font-weight="700">risk_dataset_v1</text>
+  <text x="430" y="175" class="dim mono" font-size="10.5" text-anchor="middle">FOR DATABASE risk_ml</text>
+  <text x="430" y="212" fill="#A371F7" font-size="12.5" text-anchor="middle" font-weight="700">freezes the whole DB at once</text>
+  <text x="430" y="233" class="dim" font-size="10.5" text-anchor="middle">both tables at the same instant</text>
+  <line x1="534" y1="147" x2="572" y2="147" stroke="#6E7681" stroke-width="1.5" marker-end="url(#arr)"/>
+  <rect x="580" y="92" width="180" height="110" rx="9" fill="#161B22" stroke="#3FB950" stroke-width="1.5"/>
+  <text x="670" y="120" fill="#3FB950" font-size="13" text-anchor="middle" font-weight="700">train</text>
+  <text x="670" y="152" class="h mono" font-size="17" text-anchor="middle" font-weight="700">80,000</text>
+  <text x="670" y="178" class="dim" font-size="10.5" text-anchor="middle">fit model parameters</text>
+  <rect x="770" y="92" width="180" height="110" rx="9" fill="#161B22" stroke="#79C0FF" stroke-width="1.5"/>
+  <text x="860" y="120" fill="#79C0FF" font-size="13" text-anchor="middle" font-weight="700">valid</text>
+  <text x="860" y="152" class="h mono" font-size="17" text-anchor="middle" font-weight="700">10,000</text>
+  <text x="860" y="178" class="dim" font-size="10.5" text-anchor="middle">pick features · hyperparams</text>
+  <rect x="960" y="92" width="180" height="110" rx="9" fill="#161B22" stroke="#F0883E" stroke-width="1.5"/>
+  <text x="1050" y="120" fill="#F0883E" font-size="13" text-anchor="middle" font-weight="700">test / holdout</text>
+  <text x="1050" y="152" class="h mono" font-size="17" text-anchor="middle" font-weight="700">10,000</text>
+  <text x="1050" y="178" class="dim" font-size="10.5" text-anchor="middle">final unbiased evaluation</text>
+  <text x="860" y="232" class="m" font-size="12" text-anchor="middle">all three released consistently in one version; membership is reproducible</text>
+  <rect x="44" y="266" width="1112" height="140" rx="10" fill="#0F1622" stroke="#21262D" stroke-width="1.2"/>
+  <text x="60" y="292" class="m" font-size="12.5" font-weight="700">Split by time, simulating “predict the future from the past”:</text>
+  <rect x="90" y="318" width="510" height="20" rx="4" fill="#3FB950" fill-opacity="0.18" stroke="#3FB950" stroke-width="1.3"/>
+  <text x="345" y="333" fill="#3FB950" font-size="12" text-anchor="middle" font-weight="700">train</text>
+  <rect x="606" y="318" width="244" height="20" rx="4" fill="#79C0FF" fill-opacity="0.18" stroke="#79C0FF" stroke-width="1.3"/>
+  <text x="728" y="333" fill="#79C0FF" font-size="12" text-anchor="middle" font-weight="700">valid</text>
+  <rect x="856" y="318" width="254" height="20" rx="4" fill="#F0883E" fill-opacity="0.18" stroke="#F0883E" stroke-width="1.3"/>
+  <text x="983" y="333" fill="#F0883E" font-size="12" text-anchor="middle" font-weight="700">test</text>
+  <line x1="90" y1="352" x2="1120" y2="352" stroke="#6E7681" stroke-width="1.3" marker-end="url(#arr)"/>
+  <line x1="600" y1="344" x2="600" y2="360" stroke="#6E7681" stroke-width="1.2"/>
+  <text x="600" y="376" class="dim mono" font-size="10.5" text-anchor="middle">2026-06-01</text>
+  <line x1="850" y1="344" x2="850" y2="360" stroke="#6E7681" stroke-width="1.2"/>
+  <text x="850" y="376" class="dim mono" font-size="10.5" text-anchor="middle">2026-06-15</text>
+  <text x="600" y="396" class="dim" font-size="11" text-anchor="middle">the manifest stores more than three words: cutoffs · group keys · dedup rules · seeds; preprocessors fit on train only</text>
+</svg>
