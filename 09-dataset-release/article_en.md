@@ -260,7 +260,7 @@ CREATE SNAPSHOT risk_dataset_v2 FOR DATABASE risk_ml;
 This one DIFF settles a question that's usually waved away: the metric moved — was it the **model** that changed, or the **ruler**? If test's membership, labels, or evaluation protocol changed, v2's score is still valid, but it's no longer a like-for-like comparison with v1. So cross-version trends should be compared first on an **unchanged fixed test set / golden set**, while the new time window is reported as a separate metric. And v1 remains queryable and reversible, untouched:
 
 ```sql
--- query each in its OWN statement (see one 4.1.0 note under "Boundaries")
+-- query each in its OWN statement (one snapshot per statement)
 SELECT split_name, COUNT(*) FROM dataset_membership {SNAPSHOT='risk_dataset_v1'} GROUP BY split_name;
 --   test 10104 / train 80950 / valid 10104   <- v1 unchanged, bit-for-bit
 SELECT split_name, COUNT(*) FROM dataset_membership {SNAPSHOT='risk_dataset_v2'} GROUP BY split_name;
@@ -328,8 +328,6 @@ In one line: the other approaches either freeze membership but divorce it from l
 - **Snapshots have retention cost.** A pinned historical version occupies storage until `DROP SNAPSHOT`. Retain the `dataset_vN` for each shipped model long-term, and set a cleanup policy for abandoned intermediate versions.
 
 - **Row-level operations require a consistent schema** (the boundary from [Part 4](https://github.com/matrixorigin/matrixorigin-blog/blob/main/matrixorigin/git4data-part4-landscape/index.md)): to add a feature column to the training set, do a controlled schema migration on the mainline first, then continue.
-
-- **One 4.1.0 note**: don't read **two snapshots of the same table** via scalar subqueries in one `SELECT` (measured: it returns the first snapshot's value for both columns). Put each snapshot in its own statement, or use `DATA BRANCH DIFF` — the latter's diff is accurate.
 
 ---
 

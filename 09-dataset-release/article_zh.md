@@ -260,7 +260,7 @@ CREATE SNAPSHOT risk_dataset_v2 FOR DATABASE risk_ml;
 这一条 DIFF 能把一个总被含糊带过的问题说清楚：模型指标变了，到底是**模型变了**还是**尺子变了**？如果 test 的成员、标签或评估协议动过，v2 的分数仍然有效，但它已经不是和 v1 完全同口径的直接对比。所以跨版本的趋势，应该优先在**没变过的固定测试集 / golden set** 上比，同时把新的时间窗口作为另一条独立指标报告。而 v1 始终原样可查、可回退：
 
 ```sql
--- 各自在自己的语句里查（见下方“边界”里的一个 4.1.0 注意点）
+-- 各自在自己的语句里查（每个快照一条语句）
 SELECT split_name, COUNT(*) FROM dataset_membership {SNAPSHOT='risk_dataset_v1'} GROUP BY split_name;
 --   test 10104 / train 80950 / valid 10104   ← v1 逐位不变
 SELECT split_name, COUNT(*) FROM dataset_membership {SNAPSHOT='risk_dataset_v2'} GROUP BY split_name;
@@ -328,8 +328,6 @@ SELECT split_name, COUNT(*) FROM dataset_membership {SNAPSHOT='risk_dataset_v2'}
 - **快照有保留成本**。被钉住的历史版本会占存储，直到 `DROP SNAPSHOT`。给每个上线模型对应的 `dataset_vN` 长期保留，给废弃的中间版本设清理策略。
 
 - **行级操作要求 schema 一致**（[第四篇](https://github.com/matrixorigin/matrixorigin-blog/blob/main/matrixorigin/git4data-part4-landscape-zh/index.md)的边界）：给训练集加特征列，先在主线走受控的 schema 迁移，再继续。
-
-- **一个 4.1.0 的小注意点**：不要在同一条 `SELECT` 里用标量子查询同时读**同一张表的两个快照**（实测会对两列都返回前一个快照的值）。把每个快照放进各自的语句，或者直接用 `DATA BRANCH DIFF`——后者给的差异是准确的。
 
 ---
 
