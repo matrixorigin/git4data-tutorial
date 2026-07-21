@@ -57,14 +57,17 @@ Case data: 100,000 transactions, 20,000 users (~5 each), spanning 121 days (`202
 ### First, the anti-pattern: a naive random split
 
 ```sql
+-- A split that ignores time and entity. We bucket on a DETERMINISTIC hash of
+-- sample_id (reproducible run to run) instead of an unseeded rand(); it scatters
+-- rows exactly the way a careless random split does.
 INSERT INTO membership_rand
 SELECT sample_id,
-       CASE WHEN rand() < 0.8 THEN 'train'
-            WHEN rand() < 0.5 THEN 'valid'
+       CASE WHEN CONV(SUBSTR(MD5(CAST(sample_id AS CHAR)),1,8),16,10) % 10 < 8 THEN 'train'
+            WHEN CONV(SUBSTR(MD5(CAST(sample_id AS CHAR)),1,8),16,10) % 10 = 8 THEN 'valid'
             ELSE 'test' END
 FROM samples
 WHERE label IS NOT NULL;
---   measured: train 80999 / valid 10196 / test 9963 — the proportions look fine.
+--   measured: train 80893 / valid 10229 / test 10036 — the proportions look fine.
 ```
 
 The proportions are fine, but the three detectors below expose it.
@@ -81,10 +84,10 @@ WHERE m.split_name = 'train'
   AND s.event_time > (SELECT MIN(s2.event_time)
                       FROM samples s2 JOIN membership_rand m2 ON s2.sample_id = m2.sample_id
                       WHERE m2.split_name = 'test');
---   measured: 80316. Nearly all of train's 80k rows are later than test's start — total time travel.
+--   measured: 80205. Nearly all of train's 80k rows are later than test's start — total time travel.
 ```
 
-There's a subtler temporal leak in the **label**: `label_time` (chargeback returns days later) is after the feature cutoff `event_time`, yet gets treated as "information known at the event." In fraud, "this one was later charged back" is the strongest feature — and exactly what you *don't* have at serving time. So a split must govern not just the sample's time but also guarantee: for every sample entering training, its label was genuinely knowable at the feature cutoff.
+Two things often get conflated here. A **feature** must be computable at each sample's own feature cutoff (`event_time`) — feeding in an **outcome** like "this one was later charged back" is textbook leakage (it's exactly what you don't have at serving time). A **label**, by contrast, is allowed to arrive late: `label_time` being a few days after `event_time` is normal. The requirement isn't "the label is known at `event_time`" but "the label has returned before the as-of cutoff used for this training round (here `2026-07-01`)." So the gate checks the latter — samples whose truth hasn't returned enter no set this round (that's how the 842 rows were excluded above).
 
 ### Leakage 2: entity leakage (the same person across sets)
 
@@ -114,7 +117,7 @@ SELECT COUNT(*) AS event_keys_across_splits FROM (
   GROUP BY s.event_key
   HAVING COUNT(DISTINCT m.split_name) > 1
 ) t;
---   measured: 688. Of the 2000 augmented samples, 688 groups got separated from their originals.
+--   measured: 677. Of the 2000 augmented samples, 677 groups got separated from their originals.
 ```
 
 One random split, all three detectors red. And all three are **structural leaks you can find with SQL directly on the split manifest**. Two more kinds of leakage live outside membership, but are just as fatal.
@@ -257,7 +260,7 @@ DATA BRANCH DIFF dataset_membership
 CREATE SNAPSHOT risk_dataset_v2 FOR DATABASE risk_ml;
 ```
 
-This one DIFF settles a question that's usually waved away: the metric moved — was it the **model** that changed, or the **ruler**? If test's membership, labels, or evaluation protocol changed, v2's score is still valid, but it's no longer a like-for-like comparison with v1. So cross-version trends should be compared first on an **unchanged fixed test set / golden set**, while the new time window is reported as a separate metric. And v1 remains queryable and reversible, untouched:
+This one DIFF settles a question that's usually waved away: the metric moved — was it the **model** that changed, or the **ruler**? If test's membership, labels, or evaluation protocol changed, v2's score is still valid, but it's no longer a like-for-like comparison with v1. So cross-version trends should be compared first on an **unchanged fixed test set / golden set**, while the new time window is reported as a separate metric. To square this with the opening principle: **feature, hyperparameter, and model selection look only at the validation set**; this test set that changes every round is really a **rolling evaluation window** across versions — for watching a new time period, not the "measure once after lock" unbiased ruler — while the genuinely unbiased final regression belongs on the kind of **long-lived fixed holdout / golden set** in the next section. And v1 remains queryable and reversible, untouched:
 
 ```sql
 -- query each in its OWN statement (one snapshot per statement)
@@ -283,39 +286,38 @@ discard a split    = RESTORE to the previous version
 
 Besides the test set that changes every iteration, many teams keep a long-lived **golden evaluation set**: covering key cohorts, rare risks, and business red lines, used specifically for regression across model versions. Its whole value is in "stable" — **never retrained on, changed as little as possible.**
 
-A snapshot manages it best: pin the golden set as a long-retained named version that nobody can quietly pull back into training. The day it truly must be updated (e.g. adding a new fraud pattern), that's an explicit `golden_v2` release plus a re-baselining, not a few silent edits in place — otherwise you'll find "the model gained 2 points on the golden set" was really the golden set loosening on its own. Before release, one DIFF likewise confirms it hasn't intersected the current train.
+A snapshot manages it best: pin the golden set as a long-retained named version whose content is reproducible and whose edits are detectable (traceable, tamper-evident). To be precise, a snapshot only buys traceability — it does not by itself stop someone with read access from querying it and training on it; actually preventing misuse needs access isolation plus training-pipeline auditing. The day it truly must be updated (e.g. adding a new fraud pattern), that's an explicit `golden_v2` release plus a re-baselining, not a few silent edits in place — otherwise you'll find "the model gained 2 points on the golden set" was really the golden set loosening on its own. Before release, one DIFF likewise confirms it hasn't intersected the current train.
 
 ---
 
-## The industry's other approaches: how they manage splits and prevent leakage, and where each gets stuck
+## The industry's other approaches to splits and leakage
 
-Making a split "a reproducible, auditable, reversible version" has several approaches in practice; each solves a part, and each gets stuck somewhere. Measured by one yardstick: **is membership frozen, is it one with the data version, can you see row-level "who moved between sets," where do leakage checks run, and does it need extra copies or systems.**
+First, to be clear: pinning "this version of the dataset" so you can return to it is well-served by several mature tools, each with real strengths. The point here isn't to dismiss them, but to name an often-overlooked difference — **whether the "which sample belongs to train / valid / test" membership is first-class relational data, living in the same database as the samples, frozen by the same snapshot, and auditable for leakage directly in SQL.** By that yardstick, one by one:
 
-**Approach 1: `train_test_split(random_state=42)` in a notebook.** The most common, and the one that fell over at the start. The split logic lives in code; `random_state` fixes only "how to sample," while membership and the data version it ran on aren't remembered. Change the table and the same seed is a different set of rows; the default is still random, so entity / temporal leakage rides on discipline. Reproduce, audit, roll back — none of them.
+**Notebook random split (`train_test_split`).** Membership hides in the code's `random_state` — not queryable data at all, and not bound to the data version. This is what fell over at the start.
 
-**Approach 2: store a `split` column, or re-run a split query each time.** Say `WHERE hash(id) % 10 < 8`. Given the same table it's deterministic, a big step up from random. But it still **isn't bound to the data version** — re-run on a changed table and membership changes; there's no row-level view of "who moved between any two split versions"; and leakage checks are yours to write.
+**A stored `split` column / a re-run split query.** Membership becomes a column — better; but it isn't frozen into a version alongside the samples, so re-running on a changed table changes it.
 
-**Approach 3: materialize the split into files (`train.parquet` / `test.parquet`, into DVC / lakeFS / S3).** Membership is indeed frozen — that's its upside. The cost: one data copy per version (N× storage); the split is now divorced from the "live table," so to JOIN current data or recompute a statistic in SQL you must read the files back; version comparison is **file / object level**, not the row-level "which samples moved from train to test"; and leakage checks are still one-off scripts over files.
+**Data / dataset version tools (DVC, lakeFS, Delta Lake).** All can pin "this version of the dataset" and return to it — their shared strength, each with highlights: **lakeFS offers git-style zero-copy branching over object storage** (not a full data copy per version); **Delta Lake's Change Data Feed exposes row-level insert / update / delete between versions**; DVC does file-level versioning. They solve the data / file-version layer; "which sample belongs to which set" is a modeling concept you usually build on top, and leakage checks (same user across sets, event_key across sets) are done separately after reading the data out.
 
-**Approach 4: a feature platform's training-set snapshot (Feast, Tecton, etc.).** These platforms shine at **point-in-time correctness** — feature joins by event time, which handles "future feature" temporal leakage well, and that deserves credit. But they focus on features; split-membership governance and auditing usually sit outside; and this is yet another system to bring in.
+**Feature platforms (Feast, Tecton).** Their strength is **point-in-time correctness** — feature joins by event time, handling "future feature" temporal leakage well, which deserves credit. They focus on features; split-membership governance usually sits outside.
 
-**Approach 5: data version-control tools (DVC / lakeFS / Delta Lake time travel).** They can pin a dataset to a version you can return to — the shared value. But "does a sample belong to train or test" is a **modeling concept**, not what they model; leakage detection isn't theirs either; and diff is at the file / object / table-version level, blind to "a sample's movement between sets."
+**Experiment trackers (MLflow, W&B).** These record data too: **MLflow's `mlflow.data` logs a dataset's source and digest (content fingerprint)**, and **W&B Artifacts are versioned with lineage**. They solve the traceability of "which one did this run use" well; what's recorded is a reference plus a fingerprint, not a live table you can JOIN against the current database or row-diff between two versions.
 
-**Approach 6: log the split in an experiment tracker (MLflow / W&B).** Recording the split as an artifact or dataset digest solves "which one did this run use." But what's recorded is a **dead file**: it can't JOIN the live database directly, can't row-diff two split versions, and leakage checks are still a separate thing.
+Put in one table (each tool's real strength noted):
 
-Put in one table:
+| Approach | Form of membership | Same DB & snapshot as samples | Row-level "who moved between sets" | Leakage checks |
+|---|---|---|---|---|
+| Notebook random split | code's `random_state` | No | No | on discipline |
+| Stored column / re-run SQL | a table column | No (not frozen with a version) | No | write your own |
+| DVC | versioned files | No (files divorced from live table) | file level | scripts over files |
+| lakeFS | object/path versions (**zero-copy branching**) | No (objects divorced from live table) | object/path level | hooks / scripts on objects |
+| Delta Lake | table versions + **CDF** | No (a separate table / lake) | **row-level (CDF)** | Spark / SQL (lake side) |
+| Feature platforms (Feast/Tecton) | materialized training set | partial | No | **strong on temporal** |
+| Experiment trackers (MLflow/W&B) | dataset digest / Artifact version | No | No (reference + fingerprint) | separate |
+| **MatrixOne (Git4Data capability)** | **a relational table `dataset_membership`** | **Yes (same DB, same snapshot)** | **Yes (`DATA BRANCH DIFF`)** | **SQL in the same DB, on the versioned dataset** |
 
-| Approach | Freezes membership | One with data version | Row-level "who moved between sets" | Where leakage checks run | Extra copies / systems |
-|---|---|---|---|---|---|
-| Random split (notebook) | No | No | No | on discipline | none |
-| Stored column / re-run SQL | No (changes with the table) | No | No | write your own | none |
-| Materialized split files (DVC/lakeFS/S3) | Yes | Half (divorced from the table) | No (file level) | scripts over files | **N× copies** |
-| Feature-platform training snapshot (Feast/Tecton) | Partial | Partial | No | strong on temporal, rest outside | **another system** |
-| Data version tools (DVC/lakeFS/Delta) | Yes | Yes (but not membership) | No (object / version level) | not their job | another tool |
-| Experiment-tracker artifact (MLflow/W&B) | Yes (dead file) | No | No | separate | tracking system |
-| **MatrixOne (Git4Data capability)** | **Yes** | **Yes (a database snapshot freezes it with the samples)** | **Yes (`DATA BRANCH DIFF`, row-level)** | **SQL right on the versioned dataset** | **none (the same database)** |
-
-In one line: the other approaches either freeze membership but divorce it from live data (materialized files, trackers), or version data but don't understand the concept of "split membership" (data-version tools), or excel at one class of leakage but leave governance outside the system (feature platforms). What's different about MatrixOne is that it gathers these into one database — **membership is a table, frozen with the samples by a database snapshot, leakage checks are SQL run on that version, and cross-version you can see row by row who moved.** The split stops being the most unmanaged step in the pipeline and becomes a first-class citizen: co-versioned with the data, queryable, reversible.
+So MatrixOne's difference isn't "can you version data" — the tools above each version data, some very capably. Its place is this: **treat split membership as first-class relational data, in the same database as the samples and frozen by the same snapshot, so that "same user across sets," "event_key across sets," and "is a label from the future" are a few JOINs and anti-joins run directly on the versioned dataset — and cross-version "who moved between sets" is one row-level `DATA BRANCH DIFF`.** The split turns from the pipeline's most unmanaged step into a first-class citizen: co-versioned with the data, queryable, auditable.
 
 ---
 
@@ -340,3 +342,16 @@ MatrixOne, through its Git4Data capability, puts these three into the database �
 Next, we leave structured tables for the world of large models: **SFT data curation** — how to dedup, filter, and decontaminate hundreds of thousands of instruction records entirely in SQL, with a DIFF as the receipt for every cut.
 
 > 📎 Runnable SQL: [github.com/matrixorigin/git4data-tutorial](https://github.com/matrixorigin/git4data-tutorial) ｜ Source & community: [github.com/matrixorigin/matrixone](https://github.com/matrixorigin/matrixone)
+
+
+---
+
+## References
+
+- scikit-learn — data leakage & common pitfalls: <https://scikit-learn.org/stable/common_pitfalls.html#data-leakage>
+- lakeFS — zero-copy branching: <https://docs.lakefs.io/understand/how/branches.html>
+- Delta Lake — Change Data Feed (row-level changes between versions): <https://docs.delta.io/latest/delta-change-data-feed.html>
+- MLflow — dataset tracking (`mlflow.data`): <https://mlflow.org/docs/latest/tracking/data-api.html>
+- Weights & Biases — Artifacts: <https://docs.wandb.ai/guides/artifacts>
+- Feast — point-in-time joins: <https://docs.feast.dev/getting-started/concepts/point-in-time-joins>
+- Companion runnable script (verified on MatrixOne 4.1.0): [`09-dataset-release/dataset_release_demo.sql`](https://github.com/matrixorigin/git4data-tutorial/blob/d47dc1b811a19bc1b278b29cdd8a9d1e07b7988a/09-dataset-release/dataset_release_demo.sql)

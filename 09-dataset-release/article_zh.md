@@ -57,14 +57,16 @@ CREATE TABLE samples (
 ### 先看反面教材：一次朴素的随机切分
 
 ```sql
+-- 一个不看时间、也不看实体的切分。这里用 sample_id 的确定性哈希做分桶
+-- （复跑结果一致），它打散数据的方式和随手一个随机切分完全一样。
 INSERT INTO membership_rand
 SELECT sample_id,
-       CASE WHEN rand() < 0.8 THEN 'train'
-            WHEN rand() < 0.5 THEN 'valid'
+       CASE WHEN CONV(SUBSTR(MD5(CAST(sample_id AS CHAR)),1,8),16,10) % 10 < 8 THEN 'train'
+            WHEN CONV(SUBSTR(MD5(CAST(sample_id AS CHAR)),1,8),16,10) % 10 = 8 THEN 'valid'
             ELSE 'test' END
 FROM samples
 WHERE label IS NOT NULL;
---   实测 train 80999 / valid 10196 / test 9963，比例看着很正常。
+--   实测 train 80893 / valid 10229 / test 10036，比例看着很正常。
 ```
 
 比例没问题，但下面三条检测器会让它原形毕露。
@@ -81,10 +83,10 @@ WHERE m.split_name = 'train'
   AND s.event_time > (SELECT MIN(s2.event_time)
                       FROM samples s2 JOIN membership_rand m2 ON s2.sample_id = m2.sample_id
                       WHERE m2.split_name = 'test');
---   实测 80316。train 的 8 万行里几乎全都晚于 test 的起点——彻底穿越。
+--   实测 80205。train 的 8 万行里几乎全都晚于 test 的起点——彻底穿越。
 ```
 
-还有一层更隐蔽的时间泄漏在**标签**上：`label_time`（chargeback 几天后才回来）晚于特征截点 `event_time`，但被当成“事件当时就知道的信息”。风控里“这笔后来被拒付了”正是最强的特征，也正是上线当下**拿不到**的。所以切分不仅要管样本的时间，还要保证：进入训练的每条样本，它的标签在特征截点时确实已经可知。
+这里要分清两件常被混为一谈的事。**特征**必须在每条样本自己的特征截点（`event_time`）就能算出来——把“这笔后来被拒付了”这种**结果**当成特征喂进去，就是典型的泄漏（它正是上线当下拿不到的）。而**标签**本来就允许晚到：`label_time` 比 `event_time` 晚几天是正常的，要求的不是“标签在 `event_time` 已知”，而是“标签在本轮训练所用的 as-of 截点（这里是 `2026-07-01`）之前已经回流”。所以门禁检查的正是后者——真值还没回来的样本，本轮先不进任何集合（前面那 842 行就是这么被排除的）。
 
 ### 泄漏二：实体泄漏（同一个人跨集）
 
@@ -114,7 +116,7 @@ SELECT COUNT(*) AS event_keys_across_splits FROM (
   GROUP BY s.event_key
   HAVING COUNT(DISTINCT m.split_name) > 1
 ) t;
---   实测 688。那 2000 条增强样本，有 688 组和它们的原件分了家。
+--   实测 677。那 2000 条增强样本，有 677 组和它们的原件分了家。
 ```
 
 一次随机切分，三条检测器全部亮红。而这三条，都是**能用 SQL 在切分清单上直接查出来**的结构性泄漏。还有两类泄漏不在 membership 里，但同样致命。
@@ -257,7 +259,7 @@ DATA BRANCH DIFF dataset_membership
 CREATE SNAPSHOT risk_dataset_v2 FOR DATABASE risk_ml;
 ```
 
-这一条 DIFF 能把一个总被含糊带过的问题说清楚：模型指标变了，到底是**模型变了**还是**尺子变了**？如果 test 的成员、标签或评估协议动过，v2 的分数仍然有效，但它已经不是和 v1 完全同口径的直接对比。所以跨版本的趋势，应该优先在**没变过的固定测试集 / golden set** 上比，同时把新的时间窗口作为另一条独立指标报告。而 v1 始终原样可查、可回退：
+这一条 DIFF 能把一个总被含糊带过的问题说清楚：模型指标变了，到底是**模型变了**还是**尺子变了**？如果 test 的成员、标签或评估协议动过，v2 的分数仍然有效，但它已经不是和 v1 完全同口径的直接对比。所以跨版本的趋势，应该优先在**没变过的固定测试集 / golden set** 上比，同时把新的时间窗口作为另一条独立指标报告。这里要和开头的原则对齐：**特征、超参、模型的选择只看验证集**；每轮都在变的这个 test，本质上是一个**跨版本的滚动评估窗口**——用来观察新时间段的表现，而不是那把“锁定后只测一次”的无偏尺子；真正无偏的最终回归，落在下一节那种**长期不变的固定 holdout / golden set** 上。而 v1 始终原样可查、可回退：
 
 ```sql
 -- 各自在自己的语句里查（每个快照一条语句）
@@ -283,39 +285,38 @@ SELECT split_name, COUNT(*) FROM dataset_membership {SNAPSHOT='risk_dataset_v2'}
 
 除了随每轮迭代变化的 test，很多团队还会维护一份长期稳定的 **golden evaluation set**：覆盖关键人群、罕见风险和业务底线，专门用于跨模型版本的回归。它的价值全在“稳定”二字——**永不回训、尽量不变**。
 
-用快照管它最合适：golden set 钉成一个长期保留的命名版本，谁都不能把它偷偷拿回训练。真到了必须更新的那天（比如补充新型欺诈手法），那就是一次显式的 `golden_v2` 发布 + 重建基线，而不是在原地悄悄改几行——否则你会发现“模型在 golden set 上涨了 2 个点”，其实是 golden set 自己变松了。发布前，同样用一条 DIFF 确认它没有和当前 train 产生交集。
+用快照管它最合适：golden set 钉成一个长期保留的命名版本，内容可复现、被改动能被发现（可追溯、防篡改）。要说清楚的是，快照本身只解决“可追溯”——它并不能阻止有读权限的人把它查出来、拿去训练；真要防止误用，还得靠权限隔离和训练流水线的审计来配合。真到了必须更新的那天（比如补充新型欺诈手法），那就是一次显式的 `golden_v2` 发布 + 重建基线，而不是在原地悄悄改几行——否则你会发现“模型在 golden set 上涨了 2 个点”，其实是 golden set 自己变松了。发布前，同样用一条 DIFF 确认它没有和当前 train 产生交集。
 
 ---
 
-## 行业里的其他做法：切分怎么管、泄漏怎么防，各自卡在哪
+## 行业里的其他做法：切分与泄漏，业内还有哪些方案
 
-把切分做成“可复现、可审计、可回退的版本”，业内其实有好几种做法，每一种都解决了一部分，也都在某处卡住。用同一把尺子量：**membership 冻不冻结、和数据版本是否一体、能不能行级看清“谁在集合间移动”、泄漏检查在哪做、要不要额外的副本或系统。**
+先说清楚：把“数据集这一版”钉住、可回到，业内已有不少成熟方案，各有各的强项。这里不是要否定它们，而是想指出一个常被忽略的差别——**“某条样本属于 train / valid / test”这份 membership，是不是作为一等的关系数据，和样本放在同一个库里、用同一个快照一起冻结、并且能直接用 SQL 审计泄漏。** 用这把尺子逐个看：
 
-**做法一：notebook 里 `train_test_split(random_state=42)`。** 最常见，也是开头翻车的那种。切分逻辑写在代码里，`random_state` 固定的只是“怎么抽”，membership 和它作用的数据版本都没被记住。表一变，同一个种子就是另一批行；默认还是随机切，实体 / 时间泄漏全靠人自觉。复现、审计、回退，一样都没有。
+**notebook 随机切分（`train_test_split`）。** membership 藏在代码的 `random_state` 里，根本不是一份可查询的数据，也不和数据版本绑定。开头翻车的就是它。
 
-**做法二：存一列 `split`，或每次重跑一段切分 SQL。** 比如 `WHERE hash(id) % 10 < 8`。给定同一张表它是确定的，比随机切进步很多。但它仍然**不和数据版本绑定**——重跑在变了的表上，membership 就变了；也没有“任意两版切分之间谁移动了”的行级视图；泄漏检查得自己另写。
+**存一列 `split` / 每次重跑切分 SQL。** membership 成了表里的一列，比前者好；但它不会和样本一起被冻进某个版本，重跑在变了的表上就变了。
 
-**做法三：把切分物化成文件（`train.parquet` / `test.parquet`，丢进 DVC / lakeFS / S3）。** membership 确实被冻住了，这是它的优点。代价是：每个版本一份数据副本（N 倍存储）；切分从此和“活的表”脱钩，想 JOIN 当前数据、或用 SQL 复算某个统计，都得先把文件读回来；版本比对是**文件 / 对象级**，不是“哪些样本从 train 挪到了 test”的行级差异；泄漏检查依旧是文件上的一次性脚本。
+**数据 / 数据集版本工具（DVC、lakeFS、Delta Lake）。** 这几种都能把“数据集这一版”钉住、可回到，这是它们的共同强项，而且各有亮点：**lakeFS 在对象存储上提供 git 式的 zero-copy 分支**（并不是每个版本都复制一份数据）；**Delta Lake 的 Change Data Feed 能给出版本间的行级 insert / update / delete**；DVC 则是文件级的版本化。它们解决的是“数据 / 文件版本”这一层；而“哪条样本属于哪一集”是一个建模概念，通常要你在其上再建一层，泄漏检查（同一 user 是否跨集、event_key 是否跨集）也要把数据读出来另做。
 
-**做法四：特征平台的训练集快照（Feast、Tecton 等）。** 这类平台的强项是 **point-in-time 正确性**——按事件时间做特征关联，能很好地防住“未来特征”这一类时间泄漏，这一点值得肯定。但它们聚焦的是特征，切分 membership 的治理与审计通常在平台之外；而且这是又一套要引入的系统。
+**特征平台（Feast、Tecton）。** 强项是 **point-in-time 正确性**——按事件时间做特征关联，很好地防住“未来特征”这一类时间泄漏，值得肯定。它们聚焦特征，切分 membership 的治理通常在平台之外。
 
-**做法五：数据版本工具（DVC / lakeFS / Delta Lake time travel）。** 它们能把数据集钉成一个可回到的版本，这是共同的价值。但“某条样本属于 train 还是 test”是一个**建模概念**，不是它们建模的对象；泄漏检测也不归它们管；diff 是文件 / 对象 / 表版本级，看不到“样本在集合之间的移动”。
+**实验跟踪（MLflow、W&B）。** 也能记录数据：**MLflow 的 `mlflow.data` 会记下 dataset 的来源与 digest（内容指纹）**，**W&B 的 Artifact 是带版本和血缘的**。它们很好地解决了“这次 run 用的是哪一份”的**追溯**问题；记录的是引用 + 指纹，而不是一张能直接和当前库 JOIN、对两版做行级 membership diff 的活表。
 
-**做法六：实验跟踪记录切分（MLflow / W&B）。** 把切分当作 artifact 或 dataset digest 记下来，解决了“这次用的是哪一份”的追溯问题。但记下来的是一个**死文件**：不能直接和活的库 JOIN、不能对两版切分做行级 diff、泄漏检查还是另一套。
+放进一张表里（据实标注各自的强项）：
 
-放进一张表里：
+| 方案 | membership 的形态 | 与样本同库、同快照冻结 | 行级看“谁在集合间移动” | 泄漏检查 |
+|---|---|---|---|---|
+| notebook 随机切分 | 代码里的 `random_state` | 否 | 否 | 靠自觉 |
+| 存一列 / 重跑 SQL | 表里一列 | 否（不随版本冻结） | 否 | 自己写 SQL |
+| DVC | 物化文件的版本 | 否（文件与活表分离） | 文件级 | 文件上的脚本 |
+| lakeFS | 对象 / 路径版本（**zero-copy 分支**） | 否（对象与活表分离） | 对象 / 路径级 | 对象上的 hook / 脚本 |
+| Delta Lake | 表版本 + **CDF** | 否（独立表 / 湖） | **行级（CDF）** | Spark / SQL（湖侧） |
+| 特征平台（Feast/Tecton） | 训练集物化 | 部分 | 否 | **强于时间泄漏** |
+| 实验跟踪（MLflow/W&B） | dataset digest / Artifact 版本 | 否 | 否（引用 + 指纹） | 另一套 |
+| **MatrixOne（Git4Data 能力）** | **一张关系表 `dataset_membership`** | **是（同库、同一个快照）** | **是（`DATA BRANCH DIFF`）** | **同库 SQL，直接跑在版本化数据集上** |
 
-| 做法 | 冻结 membership | 与数据版本一体 | 行级看“谁在集合间移动” | 泄漏检查在哪 | 额外副本 / 系统 |
-|---|---|---|---|---|---|
-| 随机切分（notebook） | 否 | 否 | 否 | 全靠自觉 | 无 |
-| 存一列 / 重跑 SQL 切 | 否（表一变就变） | 否 | 否 | 自己另写 | 无 |
-| 物化切分文件（DVC/lakeFS/S3） | 是 | 半（和表脱钩） | 否（文件级） | 文件上的脚本 | **N 倍副本** |
-| 特征平台训练集快照（Feast/Tecton） | 部分 | 部分 | 否 | 强于时间泄漏，其余在外 | **另一套系统** |
-| 数据版本工具（DVC/lakeFS/Delta） | 是 | 是（但非 membership） | 否（对象 / 版本级） | 不归它管 | 另一套工具 |
-| 实验跟踪记 artifact（MLflow/W&B） | 是（死文件） | 否 | 否 | 另一套 | 记录系统 |
-| **MatrixOne（Git4Data 能力）** | **是** | **是（库级快照连样本一起冻结）** | **是（`DATA BRANCH DIFF` 行级）** | **就在版本化数据集上跑 SQL** | **无（同一个库）** |
-
-一句话概括：其他做法要么只冻结了 membership 却和活数据脱钩（物化文件、实验跟踪），要么能版本化数据却不理解“切分成员”这个概念（数据版本工具），要么强在某一类泄漏却把治理留在系统之外（特征平台）。MatrixOne 的不同，是把这几件事收在同一个库里——**membership 是一张表、和样本一起被库级快照冻结、泄漏检查就是在这个版本上跑 SQL、跨版本还能行级看清谁动了**。切分于是不再是流程里最没人管的一环，而是和数据同源、可查询、可回退的一等公民。
+所以 MatrixOne 的差异不在于“能不能版本化数据”——上面几种各有各的版本化能力，有的还很强。它的位置在于：**把切分 membership 当成一等的关系数据，和样本同库、用同一个快照一起冻结，让“同一 user 跨集”“event_key 跨集”“标签是否来自未来”这些泄漏检查，就是几条直接跑在版本化数据集上的 JOIN 与反连接；跨版本“谁在集合间移动”则是一条行级 `DATA BRANCH DIFF`。** 切分于是从流程里最没人管的一环，变成和数据同源、可查询、可审计的一等公民。
 
 ---
 
@@ -340,3 +341,16 @@ MatrixOne 用 Git4Data 能力，把这三样一起放进数据库里——切分
 下一篇，我们离开结构化表格，进入大模型的语境：**SFT 数据策展**——几十万条指令数据的去重、过滤、去污染，怎么全用 SQL 原地完成，而且每一刀都有 DIFF 作为收据。
 
 > 📎 可运行 SQL：[github.com/matrixorigin/git4data-tutorial](https://github.com/matrixorigin/git4data-tutorial) ｜ 源码与社区：[github.com/matrixorigin/matrixone](https://github.com/matrixorigin/matrixone)
+
+
+---
+
+## 参考资料
+
+- scikit-learn — 数据泄漏与常见陷阱：<https://scikit-learn.org/stable/common_pitfalls.html#data-leakage>
+- lakeFS — 零拷贝分支（zero-copy branching）：<https://docs.lakefs.io/understand/how/branches.html>
+- Delta Lake — Change Data Feed（版本间行级变更）：<https://docs.delta.io/latest/delta-change-data-feed.html>
+- MLflow — Dataset 追踪（`mlflow.data`）：<https://mlflow.org/docs/latest/tracking/data-api.html>
+- Weights & Biases — Artifacts：<https://docs.wandb.ai/guides/artifacts>
+- Feast — point-in-time joins：<https://docs.feast.dev/getting-started/concepts/point-in-time-joins>
+- 本文配套可运行脚本（已在 MatrixOne 4.1.0 验证）：[`09-dataset-release/dataset_release_demo.sql`](https://github.com/matrixorigin/git4data-tutorial/blob/d47dc1b811a19bc1b278b29cdd8a9d1e07b7988a/09-dataset-release/dataset_release_demo.sql)
