@@ -73,10 +73,13 @@ FROM samples;   -- 102000 total; recent (label_time>now) rows unlabeled
 -- #############################################################################
 DROP TABLE IF EXISTS membership_rand;
 CREATE TABLE membership_rand (sample_id BIGINT PRIMARY KEY, split_name VARCHAR(16));
+-- A split that ignores time and entity. We bucket on a DETERMINISTIC hash of
+-- sample_id (reproducible run to run) instead of an unseeded rand(); it
+-- scatters rows across the sets exactly the way a careless random split does.
 INSERT INTO membership_rand
 SELECT sample_id,
-       CASE WHEN rand() < 0.8 THEN 'train'
-            WHEN rand() < 0.5 THEN 'valid'
+       CASE WHEN CONV(SUBSTR(MD5(CAST(sample_id AS CHAR)),1,8),16,10) % 10 < 8 THEN 'train'
+            WHEN CONV(SUBSTR(MD5(CAST(sample_id AS CHAR)),1,8),16,10) % 10 = 8 THEN 'valid'
             ELSE 'test' END
 FROM samples
 WHERE label IS NOT NULL;
