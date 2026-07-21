@@ -25,7 +25,7 @@ Behind all of these is the same gap: **machine learning already has code version
 
 That is exactly the gap MatrixOne's Git4Data capability fills in the ML pipeline. This part builds that whole-pipeline map first; later parts go deep along a few of its most typical stops.
 
-> 📦 Companion SQL and experiment code for this series live in [matrixorigin/git4data-tutorial](https://github.com/matrixorigin/git4data-tutorial). This article builds the whole-pipeline framework first; later parts go deep on SFT curation, collaborative labeling, RLHF preference data, and multimodal data. SQL here is verified on MatrixOne `4.1.0`.
+> 📦 Companion SQL and experiment code for this series live in [matrixorigin/git4data-tutorial](https://github.com/matrixorigin/git4data-tutorial). This article builds the whole-pipeline framework first; later parts go deep on SFT curation, collaborative labeling, RLHF preference data, and multimodal data. **The code blocks in this article are illustrative excerpts (elided for readability)**; the companion repo has a runnable script — verified end to end on MatrixOne `4.1.0`, covering the core path (ingest → split release → model registration → cross-version DIFF) — and the row counts and metrics quoted here come from its actual output.
 
 ---
 
@@ -116,6 +116,7 @@ CREATE TABLE model_registry (
     feature_version  VARCHAR(32),
     image_digest     VARCHAR(128),
     artifact_uri     VARCHAR(512),
+    artifact_digest  VARCHAR(128),   -- weights content hash / immutable object version
     valid_auc        DOUBLE,
     test_auc         DOUBLE,
     status           VARCHAR(16)
@@ -126,7 +127,7 @@ The three tables carry different duties:
 
 - `samples` is the continuously-evolving data mainline;
 - `dataset_membership` records explicitly whether each sample belongs to train, valid, or test;
-- `model_registry` stores no model binary — only the binding between a model version and its dataset, split, code, feature, runtime, and artifact location.
+- `model_registry` stores no model binary — only the binding between a model version and its dataset, split, code, feature, runtime, artifact location, and **artifact content hash**.
 
 A truly reproducible training record should look at least like this:
 
@@ -320,6 +321,7 @@ INSERT INTO model_registry VALUES (
   'feature_v7',
   'sha256:4b7...',
   's3://models/risk_m1/model.bin',
+  'sha256:weights-m1...',
   0.9430, 0.9412,
   'candidate'
 );
@@ -333,13 +335,14 @@ risk_m1
   ├── split   = time_split:v1
   ├── code    = 8f31c2...
   ├── feature = feature_v7
-  ├── runtime = sha256:4b7...
-  ├── valid   = AUC 0.9430
-  ├── test    = AUC 0.9412
-  └── artifact= s3://models/risk_m1/model.bin
+  ├── runtime  = sha256:4b7...            (image digest)
+  ├── valid    = AUC 0.9430
+  ├── test     = AUC 0.9412
+  ├── artifact = s3://models/risk_m1/model.bin
+  └── digest   = sha256:weights-m1...     (weights content hash / immutable object version)
 ```
 
-Three months later, to reproduce the model: check out the code from Git, bring up the runtime by image digest, read train / valid / test from `risk_dataset_v1`'s split manifest, and verify the artifact by hash. **What Git4Data supplies is the link that used to be lost most easily: the data scene and the evaluation scene.**
+Three months later, to reproduce the model: check out the code from Git, bring up the runtime by image digest, read train / valid / test from `risk_dataset_v1`'s split manifest, and verify the artifact against the `artifact_digest` in the registry (for weights kept in object storage / lakeFS, that maps to an immutable object / commit version). **What Git4Data supplies is the link that used to be lost most easily: the data scene and the evaluation scene.**
 
 ### Stop 6: Candidate evaluation & shipping — explain the difference first, then discuss metrics
 
@@ -431,7 +434,7 @@ CREATE SNAPSHOT risk_dataset_v2 FOR DATABASE risk_ml;
 
 INSERT INTO model_registry VALUES (
   'risk_m2', 'risk_dataset_v2', 'b710aa...', 'feature_v7',
-  'sha256:4b7...', 's3://models/risk_m2/model.bin',
+  'sha256:4b7...', 's3://models/risk_m2/model.bin', 'sha256:weights-m2...',
   0.9491, 0.9470, 'candidate'
 );
 ```
@@ -546,7 +549,7 @@ MatrixOne fits best the data that:
 
 Typical objects: sample catalogs, labels, preference pairs, feature values, data-quality results, dataset split manifests, model-registry metadata, and feedback records.
 
-Unparseable bytes — images, audio, video, huge corpus files, model weights — are better left to object storage, lakeFS, or DVC. MatrixOne's `datalink` can version a URL / reference, but if the external object is overwritten under the same URL, a database snapshot won't preserve the old bytes for you. A multimodal setting pins the "byte version" and the "catalog version" together:
+Unparseable bytes — images, audio, video, huge corpus files, model weights — are better left to object storage, lakeFS, or DVC. A MatrixOne snapshot freezes the stored **value** of these URI / reference fields (e.g. a lakeFS commit, an object version, or a stage path), but what it keeps is the pointer, not the bytes themselves — if the external object is overwritten at the same address, the database snapshot won't preserve the old bytes for you. (Note: the `datalink` type in v4.1.0 only parses `file://` / `hdfs://` / `stage://`, not `s3://`; so S3 / lakeFS objects should be stored as a stage path or an immutable object / commit version, rather than relying on `datalink` to parse an arbitrary URL.) A multimodal setting pins the "byte version" and the "catalog version" together:
 
 ```text
 model
@@ -643,3 +646,15 @@ This part built the master map of the AI-training arc. Next, we go deep along a 
 When these stops share one set of version primitives, Git4Data truly turns from a database feature into a way of working for AI data engineering.
 
 > 📎 Runnable SQL: [github.com/matrixorigin/git4data-tutorial](https://github.com/matrixorigin/git4data-tutorial) ｜ Prior seven parts: [github.com/matrixorigin/matrixorigin-blog](https://github.com/matrixorigin/matrixorigin-blog) ｜ Source & community: [github.com/matrixorigin/matrixone](https://github.com/matrixorigin/matrixone)
+
+
+---
+
+## References
+
+- MLflow — experiment tracking & model registry: <https://mlflow.org/docs/latest/tracking.html>, <https://mlflow.org/docs/latest/model-registry.html>
+- Apache Airflow — workflow scheduling: <https://airflow.apache.org/docs/>
+- scikit-learn — data leakage & common pitfalls: <https://scikit-learn.org/stable/common_pitfalls.html#data-leakage>
+- lakeFS — data version control over object storage: <https://docs.lakefs.io/>
+- Bourtoule et al., *Machine Unlearning*, IEEE S&P 2021: <https://arxiv.org/abs/1912.03817>
+- Companion runnable script (verified on MatrixOne 4.1.0): [`08-ml-lifecycle/ml_lifecycle_demo.sql`](https://github.com/matrixorigin/git4data-tutorial/blob/8207ec6d958baf5bfc4378d64e1e41902b2245f3/08-ml-lifecycle/ml_lifecycle_demo.sql)
