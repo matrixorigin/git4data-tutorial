@@ -34,7 +34,7 @@ What you actually need to freeze is **membership + rule + the version of data it
 
 ## Five kinds of leakage, hands-on
 
-Leakage means: **using, at training time, information you won't have at serving time.** Its classic symptom is the opening scene — inflated offline, sliding online. First, set up the case data.
+Leakage — the ML term, not a security data breach — means: **using, at training time, information you won't have at serving time.** Its classic symptom is the opening scene — inflated offline, sliding online. First, set up the case data.
 
 Compared with the overview, `samples` here gains three keys that leakage detection needs: `user_id` (entity key — one person, many transactions), `event_key` (dedup key — one underlying event and its augmented copies), and `label_time` (when the truth became known, later than the event time).
 
