@@ -1,10 +1,10 @@
 -- =============================================================================
 -- Git4Data Tutorial — Part 10: Deep Learning & Multimodal Data (lakeFS × MatrixOne)
--- The bytes (images/audio/video) live in lakeFS; the CATALOG (which sample points
+-- The bytes (images/audio/video) live in lakeFS; the METADATA (which sample points
 -- to which object version, its caption/label/hashes/split) lives in MatrixOne.
--- This demo exercises the catalog side: WAP ingest, exact + perceptual dedup,
+-- This demo exercises the metadata side: WAP ingest, exact + perceptual dedup,
 -- benchmark decontamination, alignment checks, relabel via branch/merge, then a
--- release that pins the catalog snapshot together with the lakeFS commit.
+-- release that pins the metadata snapshot together with the lakeFS commit.
 -- Verified on MatrixOne 4.1.0.
 --     docker run -d -p 6001:6001 --name matrixone matrixorigin/matrixone:4.1.0
 --     mysql -h 127.0.0.1 -P 6001 -u root -p111 < multimodal_demo.sql
@@ -15,7 +15,7 @@ DROP DATABASE IF EXISTS mm_train;
 CREATE DATABASE mm_train;
 USE mm_train;
 
--- The CATALOG. One row per image-text sample. The bytes are NOT here — only a
+-- The METADATA. One row per image-text sample. The bytes are NOT here — only a
 -- pointer (object_uri) plus the lakeFS commit that pins them, plus everything
 -- you actually query on: hashes, caption, label, provenance, license, quality.
 CREATE TABLE samples (
@@ -80,7 +80,7 @@ SELECT COUNT(*) AS total_rows FROM samples;   -- 55000
 
 
 -- #############################################################################
--- 1. INGEST — a new batch lands on a catalog BRANCH (bytes went to a lakeFS
+-- 1. INGEST — a new batch lands on a metadata BRANCH (bytes went to a lakeFS
 --    branch separately); audit on the branch; publish only on pass. WAP.
 -- #############################################################################
 DATA BRANCH CREATE TABLE samples_stage FROM samples;
@@ -110,7 +110,7 @@ SELECT COUNT(*) AS after_ingest FROM samples;   -- 60000
 
 -- #############################################################################
 -- 2. DEDUP — exact (content_hash) and perceptual near-dup (phash), pure SQL on
---    the catalog, at scale, without touching a single byte in lakeFS.
+--    the metadata, at scale, without touching a single byte in lakeFS.
 -- #############################################################################
 -- exact duplicates: one content_hash owned by more than one sample
 SELECT COUNT(*) AS exact_dup_groups FROM (
@@ -147,7 +147,7 @@ SELECT COUNT(*) AS unaligned_pairs FROM samples WHERE caption IS NULL;
 
 
 -- #############################################################################
--- 5. RELABEL — the catalog evolves (safety re-scoring) while the bytes stay
+-- 5. RELABEL — the metadata evolves (safety re-scoring) while the bytes stay
 --    immutable. A reviewer flips 1,000 labels on a branch, merged back.
 -- #############################################################################
 DATA BRANCH CREATE TABLE samples_review FROM samples;
@@ -159,8 +159,8 @@ DATA BRANCH MERGE samples_review INTO samples;
 
 -- #############################################################################
 -- 6. RELEASE — curate a clean subset into dataset_membership, then pin the
---    CATALOG snapshot together with the lakeFS COMMIT. Reproducible training set
---    = catalog snapshot  ×  lakeFS commit.
+--    METADATA snapshot together with the lakeFS COMMIT. Reproducible training set
+--    = metadata snapshot  ×  lakeFS commit.
 -- #############################################################################
 CREATE TABLE dataset_membership (
     sample_id  BIGINT PRIMARY KEY,
@@ -184,7 +184,7 @@ SELECT split_name, COUNT(*) FROM dataset_membership GROUP BY split_name ORDER BY
 
 CREATE TABLE dataset_registry (
     dataset_version VARCHAR(32) PRIMARY KEY,
-    catalog_snapshot VARCHAR(64),   -- the MatrixOne snapshot (catalog version)
+    metadata_snapshot VARCHAR(64),   -- the MatrixOne snapshot (metadata version)
     lakefs_repo      VARCHAR(64),
     lakefs_commit    VARCHAR(64),    -- the lakeFS commit (byte version)
     n_samples        BIGINT,
@@ -192,14 +192,14 @@ CREATE TABLE dataset_registry (
 );
 
 CREATE SNAPSHOT mm_dataset_v1 FOR DATABASE mm_train;
--- Bind the catalog version to the lakeFS commit. (Use INSERT ... SELECT: on
+-- Bind the metadata version to the lakeFS commit. (Use INSERT ... SELECT: on
 -- 4.1.0 a scalar subquery inside INSERT ... VALUES(...) is not supported.)
 INSERT INTO dataset_registry
 SELECT 'mm_v1', 'mm_dataset_v1', 'media', 'commit-2026w30-d4e5f6',
-       COUNT(*), 'catalog snapshot x lakeFS commit = reproducible training set'
+       COUNT(*), 'metadata snapshot x lakeFS commit = reproducible training set'
 FROM dataset_membership;
 
--- reproduce the exact train split months later, from the pinned catalog version
+-- reproduce the exact train split months later, from the pinned metadata version
 SELECT COUNT(*) AS train_rows_v1
 FROM samples {SNAPSHOT='mm_dataset_v1'} s
 JOIN dataset_membership {SNAPSHOT='mm_dataset_v1'} m ON s.sample_id = m.sample_id
