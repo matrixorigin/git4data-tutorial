@@ -41,8 +41,9 @@ CREATE TABLE model_registry (
     dataset_snapshot VARCHAR(64),
     code_commit     VARCHAR(64),
     feature_version VARCHAR(32),
-    image_digest    VARCHAR(128),
-    artifact_uri    VARCHAR(512),
+    image_digest    VARCHAR(128),   -- runtime image (identifies the environment)
+    artifact_uri    VARCHAR(512),   -- where the weights live (a pointer)
+    artifact_digest VARCHAR(128),   -- content hash / immutable object version of the weights
     valid_auc       DOUBLE,
     test_auc        DOUBLE,
     status          VARCHAR(16)
@@ -77,7 +78,7 @@ CREATE SNAPSHOT risk_dataset_v1 FOR DATABASE risk_ml;
 
 INSERT INTO model_registry VALUES (
     'risk_m1', 'risk_dataset_v1', '8f31c2', 'feature_v7',
-    'sha256:runtime-v1', 's3://models/risk_m1/model.bin',
+    'sha256:runtime-v1', 's3://models/risk_m1/model.bin', 'sha256:weights-m1',
     0.9430, 0.9412, 'production'
 );
 
@@ -203,12 +204,12 @@ CREATE SNAPSHOT risk_dataset_v2 FOR DATABASE risk_ml;
 
 INSERT INTO model_registry VALUES (
     'risk_m2', 'risk_dataset_v2', 'b710aa', 'feature_v7',
-    'sha256:runtime-v1', 's3://models/risk_m2/model.bin',
+    'sha256:runtime-v1', 's3://models/risk_m2/model.bin', 'sha256:weights-m2',
     0.9491, 0.9470, 'candidate'
 );
 
 SELECT model_version, dataset_snapshot, code_commit, feature_version,
-       valid_auc, test_auc, status
+       artifact_uri, artifact_digest, valid_auc, test_auc, status
 FROM model_registry
 ORDER BY model_version;
 
