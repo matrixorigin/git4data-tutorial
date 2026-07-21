@@ -1,8 +1,12 @@
 # MatrixOne Git4Data Deep Dive (Part 9) · AI Training in Practice — Dataset Release & Leakage: Don't Let Your Offline Metrics Fool You
 
-A scene many people have lived through.
+In machine learning, whether a model can be trusted before it ships is answered almost entirely by **offline evaluation**: is this version better than the last? does this feature help? what threshold is right? can we go live? — every one of those decisions comes down to the same thing: measuring the model's real performance on data it **hasn't seen**.
 
-Offline AUC 0.94, ship it with confidence, and a week later production drops to 0.78. You go back and check: the model didn't change, the features didn't change, the code didn't change — the problem was in the most overlooked step of all, how the train and test sets were split.
+And that "hasn't seen" rests entirely on how the dataset is split. Before training, we divide the data into three sets with distinct duties: the **training set** fits the model's parameters, the **validation set** selects features, tunes hyperparameters, and compares candidate models, and the **test set** gives one as-unbiased-as-possible final estimate once the approach is locked. How these three are cut, and where the boundaries are drawn, directly decides whether every metric you see afterward can be trusted.
+
+The trouble is that this step is often the most casually handled in the whole pipeline — one `train_test_split(random_state=42)` and it's done. Which leads to a scene many ML engineers have lived through.
+
+Offline AUC 0.94, ship it with confidence, and a week later production drops to 0.78. You go back and check: the model didn't change, the features didn't change, the code didn't change — the problem was in that most overlooked step of all, how the train and test sets were split.
 
 The split was a casual `train_test_split(random_state=42)`: the same user's multiple transactions got randomly scattered across train and test, so the model had actually "seen" the people in the test set; and standardization was fit on the full data *before* the split, so its mean and variance had already peeked at the test set. Worse, the dataset that produced 0.94 **can no longer be reproduced** — the notebook is long closed, the `samples` table has had a few thousand rows added and corrected this week, and the same `random_state=42` on a table that has changed gives you a different set of rows entirely.
 
