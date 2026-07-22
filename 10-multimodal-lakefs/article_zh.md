@@ -32,6 +32,20 @@
 
 两个世界必须**一起被钉住、并且保持一致**：只钉元数据，字节可能已被覆盖；只钉字节，你不知道当时哪些样本、什么标签、怎么切分。这正是 lakeFS（管字节）和 MatrixOne 的 Git4Data 能力（管元数据）各司其职、再组合起来的地方。
 
+### 为什么字节交给 lakeFS，而不是也塞进数据库？
+
+一个自然的疑问：既然 MatrixOne 能版本化数据，为什么不干脆把图像字节也放进去、一个系统全管了？前面几篇其实已经把答案铺好了。
+
+- **git4data 的低成本快照，前提是“结构化 + 元数据目录”。** [第三篇](https://github.com/matrixorigin/matrixorigin-blog/blob/main/matrixorigin/git4data-part3-under-the-hood-zh/index.md)讲过，MatrixOne 的快照近乎与数据量无关，靠的是不可变对象加元数据目录去版本化**行级结构化数据**。把 PB 级不可解析的图像字节灌进去，这个前提就不成立了——数据库会退化成一个又贵又慢的对象存储。
+
+- **字节没有可 diff 的结构。** git4data 的价值在[第二篇](https://github.com/matrixorigin/matrixorigin-blog/blob/main/matrixorigin/git4data-part2-hands-on-zh/index.md)就立住了：行级的 diff / merge / query。可一张 JPEG 没有行、没有主键、没有列——对两张图的字节做“行级 diff”毫无意义。[第四篇](https://github.com/matrixorigin/matrixorigin-blog/blob/main/matrixorigin/git4data-part4-landscape-zh/index.md)划过的边界也正是这条：git4data 管的是“同一 schema 下的结构化数据演进”，而字节根本没有 schema。
+
+- **字节是整体、不可变、内容寻址的。** 一张图不会被逐行 `UPDATE`，它只会被整体替换。这种“整块对象 + 按内容去重 + 廉价分支”的版本化，恰恰是对象存储 + lakeFS（git-over-objects）最擅长的；硬套数据库的行级 MVCC 反而别扭。
+
+- **数据库本来也只该存指针。** [第八篇](https://github.com/matrixorigin/matrixorigin-blog/blob/main/matrixorigin/git4data-part8-ml-lifecycle-zh/index.md)的总览已经说清：不可解析字节交给对象存储 / lakeFS，MatrixOne 只存目录、hash、URI 和 commit；而且数据库快照只能冻结**指针字段的取值**，冻不住外部字节本身（`datalink` 那条边界）——所以字节的版本，必须由 lakeFS 自己来担。
+
+一句话：**数据库最擅长的是“结构化元数据的行级版本化”，lakeFS 最擅长的是“大对象字节的整体版本化”。让各自做各自最强的事，再把两者钉在一起，就是这一篇的全部主张。**
+
 ---
 
 ## 一张总图：多模态数据全流程，字节归 lakeFS，元数据归 MatrixOne

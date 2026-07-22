@@ -32,6 +32,20 @@ reproducible training set = one definite metadata version (metadata snapshot)
 
 The two worlds must be **pinned together and kept consistent**: pin only the metadata and the bytes may have been overwritten; pin only the bytes and you don't know which samples, what labels, what split were in play. This is exactly where lakeFS (for the bytes) and MatrixOne's Git4Data capability (for the metadata) each do their job and then compose.
 
+### Why give the bytes to lakeFS, instead of stuffing them into the database too?
+
+A natural question: since MatrixOne can version data, why not put the image bytes in there too and let one system manage everything? The earlier parts already laid out the answer.
+
+- **Git4Data's cheap snapshots assume "structured data + a metadata catalog."** [Part 3](https://github.com/matrixorigin/matrixorigin-blog/blob/main/matrixorigin/git4data-part3-under-the-hood/index.md) showed MatrixOne's snapshots are nearly independent of data size because immutable objects plus a metadata catalog version **row-level structured data**. Pour in PB of unparseable image bytes and that assumption breaks — the database degrades into a slow, expensive object store.
+
+- **Bytes have no structure to diff.** Git4Data's value, established back in [Part 2](https://github.com/matrixorigin/matrixorigin-blog/blob/main/matrixorigin/git4data-part2-hands-on/index.md), is row-level diff / merge / query. But a JPEG has no rows, no primary key, no columns — a "row-level diff" of two images' bytes is meaningless. The boundary [Part 4](https://github.com/matrixorigin/matrixorigin-blog/blob/main/matrixorigin/git4data-part4-landscape/index.md) drew is exactly this: Git4Data manages "structured-data evolution under one schema," and bytes have no schema.
+
+- **Bytes are whole, immutable, content-addressed.** An image isn't `UPDATE`d row by row; it's replaced wholesale. Versioning that's "whole objects + content dedup + cheap branching" is exactly what object storage + lakeFS (git-over-objects) is built for; forcing the database's row-level MVCC onto it is a mismatch.
+
+- **The database should only hold the pointer anyway.** [Part 8](https://github.com/matrixorigin/matrixorigin-blog/blob/main/matrixorigin/git4data-part8-ml-lifecycle/index.md)'s overview already said it: unparseable bytes go to object storage / lakeFS, and MatrixOne stores only the catalog, hashes, URI, and commit — and a database snapshot can only freeze the **value of the pointer field**, not the external bytes themselves (the `datalink` boundary). So the byte version must be lakeFS's own job.
+
+In one line: **the database is best at "row-level versioning of structured metadata," lakeFS is best at "whole-object versioning of large bytes." Let each do what it's strongest at, then pin the two together — that's the whole thesis of this part.**
+
 ---
 
 ## One master map: the multimodal data lifecycle — bytes to lakeFS, metadata to MatrixOne
