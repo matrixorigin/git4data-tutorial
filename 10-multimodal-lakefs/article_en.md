@@ -6,7 +6,7 @@ From this part on, we turn to the data of **deep learning**. One clarification f
 
 **This part focuses on managing that kind of multimodal / unstructured-media training data** — the most typical, and hardest-to-version, data shape in deep learning, not deep learning as a whole. When the data goes from "rows in a table" to "a pile of bytes + a huge metadata table," the versioning playbook has to change.
 
-> This part is the **opening overview of multimodal training-data management** (the first in the deep-learning-data thread), the structural counterpart of Part 8 for classical machine learning: lay out the whole picture first — from arrival to release, what the real problem is at each step, and which side owns the bytes versus the metadata. All metadata-side SQL here is verified on MatrixOne `4.1.0`; the runnable version lives in [matrixorigin/git4data-tutorial](https://github.com/matrixorigin/git4data-tutorial) under `10-multimodal-lakefs/`.
+> This part is the **opening overview of multimodal training-data management** (the first in the deep-learning-data thread), the structural counterpart of Part 8 for classical machine learning: lay out the whole picture first — from arrival to release, what the real problem is at each step, and which side owns the bytes versus the metadata. All metadata-side SQL here is verified on MatrixOne `4.1.0`; the full end-to-end lakeFS + MatrixOne script [`run_practice.sh`](https://github.com/matrixorigin/git4data-tutorial/blob/main/10-multimodal-lakefs/run_practice.sh) is verified too, in [matrixorigin/git4data-tutorial](https://github.com/matrixorigin/git4data-tutorial) under `10-multimodal-lakefs/`.
 
 ---
 
@@ -114,11 +114,23 @@ run = metadata snapshot
 
 ### Stop 1: Ingestion — WAP across two worlds
 
-Monday, upstream delivers 5,000 new image-text pairs. The bytes are pushed to a lakeFS ingest branch; meanwhile the metadata rows enter a metadata branch, not yet touching the set:
+Monday, upstream delivers a new batch of image-text pairs. Both worlds move at once, each running its own WAP.
+
+**Byte side (lakeFS)**: new objects are uploaded to an ingest branch, byte-level checks run (can it decode, dimensions, a safety pre-scan — a pre-merge hook fits here), then commit and merge to main — the commit you get is this batch's byte version (the lakeFS commands and commit value below are from the runnable [`run_practice.sh`](https://github.com/matrixorigin/git4data-tutorial/blob/main/10-multimodal-lakefs/run_practice.sh); `$L` is its API endpoint, `$KEY:$SECRET` its credentials):
+
+```bash
+# after uploading objects to the ingest branch, commit and merge to main
+curl -u $KEY:$SECRET -X POST $L/repositories/media/branches/ingest/commits -d '{"message":"ingest 2026w30"}'
+curl -u $KEY:$SECRET -X POST $L/repositories/media/refs/ingest/merge/main   -d '{"message":"publish 2026w30"}'
+#   -> main commit (the byte version) = ba1693908b37…
+```
+
+**Metadata side (MatrixOne)**: the same batch's metadata rows — pointer to the lakeFS object, `object_commit` set to the commit just obtained — enter a branch, are audited, and merge only on pass. This is exactly [Part 7's Write-Audit-Publish](https://github.com/matrixorigin/matrixorigin-blog/blob/main/matrixorigin/git4data-part7-write-audit-publish/index.md), now spanning two worlds:
 
 ```sql
 DATA BRANCH CREATE TABLE samples_stage FROM samples;
-INSERT INTO samples_stage SELECT ... FROM ...;   -- the batch enters staging only
+-- the batch enters staging only; each row object_commit = 'ba1693908b37…'
+INSERT INTO samples_stage SELECT ... FROM ...;
 
 -- metadata-side gate: pointers complete? captions present? license known?
 SELECT
@@ -132,7 +144,7 @@ DATA BRANCH DIFF samples_stage AGAINST samples OUTPUT SUMMARY;   -- measured INS
 DATA BRANCH MERGE samples_stage INTO samples;                    -- publish only on full pass
 ```
 
-The byte-side counterpart is a lakeFS pre-merge hook on that ingest branch doing byte-level checks (can the file decode, dimensions, a safety pre-scan), merging the lakeFS branch only on pass. **Each side audits and merges atomically; whatever fails on either side doesn't reach the mainline.**
+**Each side audits and merges atomically; whatever fails on either side doesn't reach the mainline.**
 
 ### Stop 2: Dedup — exact + perceptual, pure SQL, not one byte touched
 
@@ -216,19 +228,24 @@ CREATE SNAPSHOT mm_dataset_v1 FOR DATABASE mm_train;
 
 -- register "metadata version × byte version" as an executable binding
 INSERT INTO dataset_registry
-SELECT 'mm_v1', 'mm_dataset_v1', 'media', 'commit-2026w30-d4e5f6',
+SELECT 'mm_v1', 'mm_dataset_v1', 'media', 'ba1693908b37…',
        COUNT(*), 'metadata snapshot × lakeFS commit = reproducible training set'
 FROM dataset_membership;
 ```
 
-From now on, "what data did mm_v1 use" is no longer a verbal description but a product: `mm_dataset_v1` (the metadata snapshot) names the samples, labels, and split, and `commit-2026w30-d4e5f6` (the lakeFS commit) names the bytes. To reproduce three months later, read the metadata from the snapshot and pull the bytes from the commit:
+From now on, "what data did mm_v1 use" is no longer a verbal description but a product: `mm_dataset_v1` (the metadata snapshot) names the samples, labels, and split, and `ba1693908b37…` (the lakeFS commit) names the bytes. And reproducing isn't just counting rows — you can fetch the **actual bytes** back: read a train sample's pointer and commit from the snapshot, then go to lakeFS at that commit (this is really run in the companion [`run_practice.sh`](https://github.com/matrixorigin/git4data-tutorial/blob/main/10-multimodal-lakefs/run_practice.sh)):
 
 ```sql
-SELECT COUNT(*) AS train_rows_v1
+SELECT s.object_uri, s.object_commit
 FROM samples {SNAPSHOT='mm_dataset_v1'} s
 JOIN dataset_membership {SNAPSHOT='mm_dataset_v1'} m ON s.sample_id = m.sample_id
-WHERE m.split_name = 'train';
---   measured 38474, bit-for-bit
+WHERE m.split_name = 'train' ORDER BY s.sample_id LIMIT 1;
+--   -> lakefs://media/main/img/000003.jpg  @  ba1693908b37…
+```
+
+```bash
+curl -u $KEY:$SECRET "$L/repositories/media/refs/ba1693908b37…/objects?path=img/000003.jpg"
+#   -> "img-3-bytes"   <- metadata snapshot × lakeFS commit reproduced the exact bytes
 ```
 
 ---
@@ -250,60 +267,6 @@ This part has to make the boundary clear, or it's easy to assume "one of them is
 | Alignment of the two | **a binding in the registry** | metadata snapshot × lakeFS commit = reproducible training set | —— |
 
 This is more realistic than "hoping one tool manages both bytes and metadata well." Bytes have their optimal solution, the metadata has its own; the key is to **pin them together explicitly**.
-
----
-
-## Run it for real: an end-to-end lakeFS + MatrixOne practice
-
-Everything above was described side by side. This section actually wires the two worlds together and runs them — the companion repo has a directly runnable [`run_practice.sh`](https://github.com/matrixorigin/git4data-tutorial/blob/main/10-multimodal-lakefs/run_practice.sh); below is its skeleton and measured output (commit values differ per run; the one shown is an example — the counts are deterministic).
-
-**Start the two services**, one container each:
-
-```bash
-# byte side: lakeFS (local storage + pre-seeded admin credentials)
-docker run -d --name lakefs -p 8000:8000 \
-  -e LAKEFS_INSTALLATION_ACCESS_KEY_ID=... -e LAKEFS_INSTALLATION_SECRET_ACCESS_KEY=... \
-  -e LAKEFS_DATABASE_TYPE=local -e LAKEFS_BLOCKSTORE_TYPE=local \
-  -e LAKEFS_AUTH_ENCRYPT_SECRET_KEY=... treeverse/lakefs:latest run
-# metadata side: MatrixOne
-docker run -d --name matrixone -p 6001:6001 matrixorigin/matrixone:4.1.0
-```
-
-**① Bytes into lakeFS**: create the repo, open an ingest branch, upload objects, commit, merge to main, and get a real commit (the "byte version"):
-
-```bash
-curl -u $KEY:$SECRET -X POST $L/repositories/media/branches/ingest/commits -d '{"message":"ingest 2026w30"}'
-curl -u $KEY:$SECRET -X POST $L/repositories/media/refs/ingest/merge/main   -d '{"message":"publish 2026w30"}'
-#   -> main commit (the byte version) = ba1693908b37…
-```
-
-**② Metadata into MatrixOne**: each row points at a lakeFS object path + the commit just obtained; then dedup, decontaminate, align, curate on the metadata, snapshot it, and record the commit in a registry:
-
-```sql
--- each samples row: object_uri='lakefs://media/main/img/000003.jpg', object_commit='ba1693908b37…',
---                   content_hash, phash, caption, label, license
---   measured exact_dup 1 / near_dup 1 / contaminated 1 / unaligned 1; after curation train 4 / valid 1 / test 1
-CREATE SNAPSHOT mm_dataset_v1 FOR DATABASE mm_practice;
-INSERT INTO dataset_registry
-SELECT 'mm_v1', 'mm_dataset_v1', 'media', 'ba1693908b37…', COUNT(*) FROM dataset_membership;
-```
-
-**③ Reproduce — use both IDs together**: read a train sample's pointer and commit from the metadata snapshot, then go back to lakeFS and fetch the **actual bytes** at that commit:
-
-```sql
-SELECT s.object_uri, s.object_commit
-FROM samples {SNAPSHOT='mm_dataset_v1'} s
-JOIN dataset_membership {SNAPSHOT='mm_dataset_v1'} m ON s.sample_id = m.sample_id
-WHERE m.split_name = 'train' ORDER BY s.sample_id LIMIT 1;
---   -> lakefs://media/main/img/000003.jpg  @  ba1693908b37…
-```
-
-```bash
-curl -u $KEY:$SECRET "$L/repositories/media/refs/ba1693908b37…/objects?path=img/000003.jpg"
-#   -> "img-3-bytes"   <- metadata snapshot × lakeFS commit reproduced the exact bytes
-```
-
-One metadata snapshot plus one lakeFS commit nail down exactly "which samples, which version of the bytes this training used" — which is the whole point of composing the two version worlds.
 
 ---
 

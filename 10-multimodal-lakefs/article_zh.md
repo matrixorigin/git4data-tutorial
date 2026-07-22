@@ -6,7 +6,7 @@
 
 **本篇聚焦的，就是这一类多模态 / 非结构化媒体训练数据该怎么管**——它是深度学习里最典型、也最难版本化的数据形态，而不是深度学习的全部。数据从"表里的行"变成"一堆字节 + 一张巨大的元数据表"，版本管理也得换一套打法。
 
-> 这一篇是**多模态训练数据管理**的开篇总览（深度学习数据这条线的第一篇），结构上对应第八篇之于传统机器学习：先把整张图摊开——多模态训练数据从进入到发布，每一步的真实难题是什么，字节该交给谁、元数据该交给谁。文中元数据侧的 SQL 全部在 MatrixOne `4.1.0` 上实测，可跑版本见 [matrixorigin/git4data-tutorial](https://github.com/matrixorigin/git4data-tutorial) 的 `10-multimodal-lakefs/`。
+> 这一篇是**多模态训练数据管理**的开篇总览（深度学习数据这条线的第一篇），结构上对应第八篇之于传统机器学习：先把整张图摊开——多模态训练数据从进入到发布，每一步的真实难题是什么，字节该交给谁、元数据该交给谁。文中元数据侧的 SQL 全部在 MatrixOne `4.1.0` 上实测；lakeFS + MatrixOne 的完整端到端脚本 [`run_practice.sh`](https://github.com/matrixorigin/git4data-tutorial/blob/main/10-multimodal-lakefs/run_practice.sh) 也真跑通过，见 [matrixorigin/git4data-tutorial](https://github.com/matrixorigin/git4data-tutorial) 的 `10-multimodal-lakefs/`。
 
 ---
 
@@ -114,11 +114,23 @@ run = 元数据快照（metadata snapshot）
 
 ### 第一站：数据接入——WAP 跨两个世界
 
-星期一，上游送来 5000 条新图文对。字节被推到 lakeFS 的一条 ingest 分支；与此同时，元数据行进入一条元数据分支，先不碰主集：
+星期一，上游送来一批新图文对。两个世界同时动，各走各的 WAP。
+
+**字节侧（lakeFS）**：新对象先上传到一条 ingest 分支，做完字节层校验（能否解码、尺寸、safety 预扫，可挂 pre-merge hook）再 commit、合并到 main——拿到的这个 commit 就是这批字节的版本（下面的 lakeFS 命令与 commit 值取自可跑脚本 [`run_practice.sh`](https://github.com/matrixorigin/git4data-tutorial/blob/main/10-multimodal-lakefs/run_practice.sh)，`$L` 是它的 API 地址、`$KEY:$SECRET` 是凭证）：
+
+```bash
+# 上传对象到 ingest 分支后，提交并合并到 main
+curl -u $KEY:$SECRET -X POST $L/repositories/media/branches/ingest/commits -d '{"message":"ingest 2026w30"}'
+curl -u $KEY:$SECRET -X POST $L/repositories/media/refs/ingest/merge/main   -d '{"message":"publish 2026w30"}'
+#   -> main commit（字节版本）= ba1693908b37…
+```
+
+**元数据侧（MatrixOne）**：同一批样本的元数据行——指针指向 lakeFS 对象、`object_commit` 填刚拿到的那个 commit——进入一条分支，先审计、通过才合并。这正是[第七篇 Write-Audit-Publish](https://github.com/matrixorigin/matrixorigin-blog/blob/main/matrixorigin/git4data-part7-write-audit-publish-zh/index.md) 那套，只是现在跨了两个世界：
 
 ```sql
 DATA BRANCH CREATE TABLE samples_stage FROM samples;
-INSERT INTO samples_stage SELECT ... FROM ...;   -- 新批次只进 staging 分支
+-- 新批次只进 staging 分支，每行 object_commit = 'ba1693908b37…'
+INSERT INTO samples_stage SELECT ... FROM ...;
 
 -- 元数据侧门禁：指针完整？caption 齐不齐？license 明不明？
 SELECT
@@ -132,7 +144,7 @@ DATA BRANCH DIFF samples_stage AGAINST samples OUTPUT SUMMARY;   -- 实测 INSER
 DATA BRANCH MERGE samples_stage INTO samples;                    -- 全部通过才发布
 ```
 
-字节侧的对应动作，是 lakeFS 的 pre-merge hook 在那条 ingest 分支上做字节层校验（文件能否解码、尺寸、safety 预扫），通过了才把 lakeFS 分支合并。**两侧各自审计、各自原子合并，谁没过谁不进主线。**
+**两侧各自审计、各自原子合并，谁没过谁都不进主线。**
 
 ### 第二站：去重——精确 + 感知，纯 SQL，不碰一个字节
 
@@ -216,19 +228,24 @@ CREATE SNAPSHOT mm_dataset_v1 FOR DATABASE mm_train;
 
 -- 把“元数据版本 × 字节版本”登记成一条可执行的绑定
 INSERT INTO dataset_registry
-SELECT 'mm_v1', 'mm_dataset_v1', 'media', 'commit-2026w30-d4e5f6',
+SELECT 'mm_v1', 'mm_dataset_v1', 'media', 'ba1693908b37…',
        COUNT(*), 'metadata snapshot × lakeFS commit = reproducible training set'
 FROM dataset_membership;
 ```
 
-从此，“mm_v1 到底用了哪些数据”不再是一句口头描述，而是一个乘积：`mm_dataset_v1`（元数据快照）指明了样本、标签、切分，`commit-2026w30-d4e5f6`（lakeFS commit）指明了字节。三个月后复现，元数据从快照读、字节从 commit 拉：
+从此，“mm_v1 到底用了哪些数据”不再是一句口头描述，而是一个乘积：`mm_dataset_v1`（元数据快照）指明了样本、标签、切分，`ba1693908b37…`（lakeFS commit）指明了字节。而复现也不止是数出行数——可以把**确切的字节**取回来：从快照读出一条训练样本的指针和 commit，再回 lakeFS 按那个 commit 取字节（下面这段在配套 [`run_practice.sh`](https://github.com/matrixorigin/git4data-tutorial/blob/main/10-multimodal-lakefs/run_practice.sh) 里是真跑的）：
 
 ```sql
-SELECT COUNT(*) AS train_rows_v1
+SELECT s.object_uri, s.object_commit
 FROM samples {SNAPSHOT='mm_dataset_v1'} s
 JOIN dataset_membership {SNAPSHOT='mm_dataset_v1'} m ON s.sample_id = m.sample_id
-WHERE m.split_name = 'train';
---   实测 38474，逐位一致
+WHERE m.split_name = 'train' ORDER BY s.sample_id LIMIT 1;
+--   -> lakefs://media/main/img/000003.jpg  @  ba1693908b37…
+```
+
+```bash
+curl -u $KEY:$SECRET "$L/repositories/media/refs/ba1693908b37…/objects?path=img/000003.jpg"
+#   -> "img-3-bytes"   ← 元数据快照 × lakeFS commit，把确切的字节复现了出来
 ```
 
 ---
@@ -250,60 +267,6 @@ WHERE m.split_name = 'train';
 | 两者的对齐 | **注册表里的一条绑定** | 元数据快照 × lakeFS commit = 可复现训练集 | —— |
 
 这比“指望一个工具同时管好字节和元数据”更贴近现实。字节有字节的最优解，元数据有元数据的最优解，关键是把它们**显式地钉在一起**。
-
----
-
-## 把它真跑一遍：lakeFS + MatrixOne 端到端实践
-
-前面都是分开讲。这一节把两个世界真的接起来跑一遍——配套仓库里有可直接执行的 [`run_practice.sh`](https://github.com/matrixorigin/git4data-tutorial/blob/main/10-multimodal-lakefs/run_practice.sh)，下面是它的骨架与实测输出（commit 值每次运行不同，这里给的是一次示例；计数是确定的）。
-
-**先起两个服务**，各一个容器：
-
-```bash
-# 字节侧：lakeFS（本地存储 + 预置管理员凭证）
-docker run -d --name lakefs -p 8000:8000 \
-  -e LAKEFS_INSTALLATION_ACCESS_KEY_ID=... -e LAKEFS_INSTALLATION_SECRET_ACCESS_KEY=... \
-  -e LAKEFS_DATABASE_TYPE=local -e LAKEFS_BLOCKSTORE_TYPE=local \
-  -e LAKEFS_AUTH_ENCRYPT_SECRET_KEY=... treeverse/lakefs:latest run
-# 元数据侧：MatrixOne
-docker run -d --name matrixone -p 6001:6001 matrixorigin/matrixone:4.1.0
-```
-
-**① 字节进 lakeFS**：建仓库、开 ingest 分支、上传对象、提交、合并到 main，拿到一个真实的 commit（就是“字节版本”）：
-
-```bash
-curl -u $KEY:$SECRET -X POST $L/repositories/media/branches/ingest/commits -d '{"message":"ingest 2026w30"}'
-curl -u $KEY:$SECRET -X POST $L/repositories/media/refs/ingest/merge/main   -d '{"message":"publish 2026w30"}'
-#   -> main commit（字节版本）= ba1693908b37…
-```
-
-**② 元数据进 MatrixOne**：每行指向 lakeFS 的对象路径 + 刚拿到的那个 commit，然后在元数据上去重、去污染、对齐、策展、打快照，并把 commit 记进注册表：
-
-```sql
--- samples 每行：object_uri='lakefs://media/main/img/000003.jpg', object_commit='ba1693908b37…',
---               content_hash, phash, caption, label, license
---   实测 exact_dup 1 / near_dup 1 / contaminated 1 / unaligned 1；策展后 train 4 / valid 1 / test 1
-CREATE SNAPSHOT mm_dataset_v1 FOR DATABASE mm_practice;
-INSERT INTO dataset_registry
-SELECT 'mm_v1', 'mm_dataset_v1', 'media', 'ba1693908b37…', COUNT(*) FROM dataset_membership;
-```
-
-**③ 复现——两个 ID 一起用**：从元数据快照里读出一条训练样本的指针和 commit，再回 lakeFS 按那个 commit 把**真正的字节**取回来：
-
-```sql
-SELECT s.object_uri, s.object_commit
-FROM samples {SNAPSHOT='mm_dataset_v1'} s
-JOIN dataset_membership {SNAPSHOT='mm_dataset_v1'} m ON s.sample_id = m.sample_id
-WHERE m.split_name = 'train' ORDER BY s.sample_id LIMIT 1;
---   -> lakefs://media/main/img/000003.jpg  @  ba1693908b37…
-```
-
-```bash
-curl -u $KEY:$SECRET "$L/repositories/media/refs/ba1693908b37…/objects?path=img/000003.jpg"
-#   -> "img-3-bytes"   ← 元数据快照 × lakeFS commit，把确切的字节复现了出来
-```
-
-一个元数据快照 + 一个 lakeFS commit，就把“当时训练用的到底是哪些样本、哪一版字节”完整钉死了——这就是两个版本世界组合起来的全部意义。
 
 ---
 
