@@ -289,6 +289,4 @@ curl -u $KEY:$SECRET "$L/repositories/media/refs/ba1693908b37…/objects?path=im
 
 更现实的架构，是让 **lakeFS 管文件、MatrixOne 的 Git4Data 能力管元数据**，再用“元数据快照 × lakeFS commit”把两个版本世界钉成一个可复现的整体。去重、去污染、完整性、重标注、data curation——这些真正决定训练数据质量的操作，几乎都发生在元数据上，而元数据，恰好是一张可以用 SQL 版本化管理的表。
 
-下一篇，我们回到大模型的文本世界：**SFT 数据 curation**——几十万条指令数据的去重、过滤、去污染，怎么全用 SQL 原地完成，每一刀都有 DIFF 作为收据。
-
 > 📎 可运行 SQL：[github.com/matrixorigin/git4data-tutorial](https://github.com/matrixorigin/git4data-tutorial) ｜ 源码与社区：[github.com/matrixorigin/matrixone](https://github.com/matrixorigin/matrixone)

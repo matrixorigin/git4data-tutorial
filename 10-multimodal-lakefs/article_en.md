@@ -289,6 +289,4 @@ Deep learning turned training data from "rows in a table" into "files in object 
 
 The more realistic architecture lets **lakeFS manage the files and MatrixOne's Git4Data capability manage the metadata**, then pins the two version worlds into one reproducible whole via "metadata snapshot × lakeFS commit." Dedup, decontamination, integrity, relabeling, data curation — the operations that actually decide training-data quality happen almost entirely on the metadata, and the metadata happens to be a table you can version with SQL.
 
-Next, we return to the text world of large models: **SFT data curation** — how to dedup, filter, and decontaminate hundreds of thousands of instruction records entirely in SQL, with a DIFF as the receipt for every cut.
-
 > 📎 Runnable SQL: [github.com/matrixorigin/git4data-tutorial](https://github.com/matrixorigin/git4data-tutorial) ｜ Source & community: [github.com/matrixorigin/matrixone](https://github.com/matrixorigin/matrixone)
