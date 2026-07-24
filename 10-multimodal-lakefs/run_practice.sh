@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
 # =============================================================================
-# Git4Data Part 10 — end-to-end practice: lakeFS (bytes) × MatrixOne (metadata)
+# Git4Data Part 10 — end-to-end practice: lakeFS (files) × MatrixOne (metadata)
 #
-# Proves the two version worlds compose into one reproducible training set:
-#   - lakeFS holds the image bytes; we ingest on a branch, commit, merge to main
+# Proves the two version worlds compose into one reproducible training set (an
+#   image-classification dataset; label = safe / nsfw):
+#   - lakeFS holds the image files; we ingest on a branch, commit, merge to main
 #     -> a real lakeFS commit id (the BYTE version).
 #   - MatrixOne holds the metadata (pointer + commit + hashes + caption + label);
 #     we dedup / decontaminate / align / curate in SQL, then snapshot the db
@@ -66,32 +67,31 @@ echo "### 2. MatrixOne: load metadata rows that POINT at those bytes @ that comm
 echo "DROP SNAPSHOT IF EXISTS mm_dataset_v1; DROP DATABASE IF EXISTS mm_practice;"
 echo "CREATE DATABASE mm_practice; USE mm_practice;"
 echo "CREATE TABLE samples (sample_id BIGINT PRIMARY KEY, object_uri VARCHAR(256), object_commit VARCHAR(64),"
-echo "  content_hash VARCHAR(64), phash VARCHAR(64), caption TEXT, label VARCHAR(16), license VARCHAR(16));"
+echo "  content_hash VARCHAR(64), phash VARCHAR(64), label VARCHAR(16), license VARCHAR(16));"
 for i in "${!PATHS[@]}"; do
   id=$((i+1))
-  cap="'a photo ${id}'"; [ "$id" = 5 ] && cap=NULL          # #5 unaligned (no caption)
   lic="'cc0'"; [ "$id" = 6 ] && lic="'unknown'"             # #6 unknown license
-  lab="'safe'"; [ "$id" = 7 ] && lab="'nsfw'"
-  echo "INSERT INTO samples VALUES ($id,'lakefs://media/main/${PATHS[$i]}','$COMMIT','${CHASH[$i]}','${PHASH[$i]}',$cap,$lab,$lic);"
+  lab="'safe'"; [ "$id" = 7 ] && lab="'nsfw'"; [ "$id" = 5 ] && lab=NULL   # #5 not labeled
+  echo "INSERT INTO samples VALUES ($id,'lakefs://media/main/${PATHS[$i]}','$COMMIT','${CHASH[$i]}','${PHASH[$i]}',$lab,$lic);"
 done
 echo "CREATE TABLE eval_hashes (content_hash VARCHAR(64) PRIMARY KEY);"
 echo "INSERT INTO eval_hashes VALUES ('${CHASH[1]}');"   # #2 is a benchmark image
 } | MO >/dev/null
 echo "    loaded 10 metadata rows"
 
-echo "### 3. metadata-side SQL: dedup / decontaminate / align, then curate + snapshot"
+echo "### 3. metadata-side SQL: dedup / decontaminate / integrity, then data-curation + snapshot"
 MO <<SQL
 USE mm_practice;
 SELECT 'exact_dup_groups' k, COUNT(*) v FROM (SELECT content_hash FROM samples GROUP BY content_hash HAVING COUNT(*)>1) t
 UNION ALL SELECT 'near_dup_groups', COUNT(*) FROM (SELECT phash FROM samples GROUP BY phash HAVING COUNT(DISTINCT content_hash)>1) t
 UNION ALL SELECT 'contaminated', COUNT(*) FROM samples s WHERE EXISTS(SELECT 1 FROM eval_hashes e WHERE e.content_hash=s.content_hash)
-UNION ALL SELECT 'unaligned_pairs', COUNT(*) FROM samples WHERE caption IS NULL;
+UNION ALL SELECT 'unlabeled', COUNT(*) FROM samples WHERE label IS NULL;
 
 CREATE TABLE dataset_membership (sample_id BIGINT PRIMARY KEY, split_name VARCHAR(16));
 INSERT INTO dataset_membership
 SELECT s.sample_id, CASE WHEN s.sample_id%5=0 THEN 'test' WHEN s.sample_id%5=1 THEN 'valid' ELSE 'train' END
 FROM samples s
-WHERE s.caption IS NOT NULL AND s.license<>'unknown'
+WHERE s.label IS NOT NULL AND s.license<>'unknown'
   AND NOT EXISTS(SELECT 1 FROM eval_hashes e WHERE e.content_hash=s.content_hash)
   AND s.sample_id=(SELECT MIN(s2.sample_id) FROM samples s2 WHERE s2.content_hash=s.content_hash);
 SELECT split_name, COUNT(*) FROM dataset_membership GROUP BY split_name ORDER BY split_name;
